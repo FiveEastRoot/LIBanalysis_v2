@@ -289,7 +289,8 @@ def split_keywords_simple(text):
     return filtered
 
 # 통합 추출: 키워드 + 대상범주
-def extract_keyword_and_audience(responses, batch_size=8):  # 배치 크기 축소로 응답 지연 개선
+@st.cache_data(show_spinner=False)
+def extract_keyword_and_audience(responses, batch_size=8):  # 배치 크기 축소로 응답 지연 개선  # 배치 크기 축소로 응답 지연 개선
     results = []
     for i in range(0, len(responses), batch_size):
         batch = responses[i:i+batch_size]
@@ -340,6 +341,7 @@ def extract_keyword_and_audience(responses, batch_size=8):  # 배치 크기 축�
 # 전체 응답 처리
 import math
 
+@st.cache_data(show_spinner=False)
 def process_answers(responses):
     # 콤마(,) 기준으로 다중 응답 분리
     expanded = []
@@ -373,6 +375,7 @@ def process_answers(responses):
                 '대상범주': aud
             })
     return pd.DataFrame(processed)
+
 
 # 시각화 페이지 함수
 def show_short_answer_keyword_analysis(df_result):
