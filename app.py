@@ -277,8 +277,16 @@ def is_trivial(text):
 
 # 단순 분할(Fallback)
 def split_keywords_simple(text):
-    parts = re.split(r"[.,/\s]+", text)
-    return [p.strip() for p in parts if len(p.strip()) > 1]
+    # 문장 단위로 분할 (마침표, 쉼표, 세미콜론 기준)
+    parts = [p.strip() for p in re.split(r"[.,;]+", text) if p.strip()]
+    filtered = []
+    for part in parts:
+        # 특수문자 제거
+        p = re.sub(r"[^\\w가-힣 ]", "", part).strip()
+        # 길이 기준 및 KDC 매핑 가능한 부분만 남김
+        if len(p) >= 2 and map_keyword_to_category(p) != "해당없음":
+            filtered.append(p)
+    return filtered
 
 # 통합 추출: 키워드 + 대상범주
 def extract_keyword_and_audience(responses, batch_size=8):  # 배치 크기 축소로 응답 지연 개선
