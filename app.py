@@ -281,7 +281,7 @@ def split_keywords_simple(text):
     return [p.strip() for p in parts if len(p.strip()) > 1]
 
 # 통합 추출: 키워드 + 대상범주
-def extract_keyword_and_audience(responses, batch_size=10):
+def extract_keyword_and_audience(responses, batch_size=8):  # 배치 크기 축소로 응답 지연 개선
     results = []
     for i in range(0, len(responses), batch_size):
         batch = responses[i:i+batch_size]
@@ -302,7 +302,7 @@ def extract_keyword_and_audience(responses, batch_size=10):
             model="gpt-4.1-mini-2025-04-14",
             messages=[{"role": "system", "content": prompt}],
             temperature=0.2,
-            max_tokens=800
+            max_tokens=300  # 토큰 제한 축소로 처리 시간 단축
         )
         content = resp.choices[0].message.content.strip()
         try:
@@ -333,9 +333,22 @@ def extract_keyword_and_audience(responses, batch_size=10):
 import math
 
 def process_answers(responses):
+    # 콤마(,) 기준으로 다중 응답 분리
+    expanded = []
+    for ans in responses:
+        # trivial 응답 제외 전처리
+        if is_trivial(ans):
+            continue
+        parts = [p.strip() for p in ans.split(',') if p.strip()]
+        # 단일 또는 다중 항목 처리
+        if len(parts) > 1:
+            expanded.extend(parts)
+        else:
+            expanded.append(ans)
+
     processed = []
     # 통합 호출 횟수 계산
-    batches = extract_keyword_and_audience(responses, batch_size=20)
+    batches = extract_keyword_and_audience(expanded, batch_size=8)  # 호출 횟수 조정
     for resp, kws, aud in batches:
         if is_trivial(resp):
             continue
