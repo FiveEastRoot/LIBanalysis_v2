@@ -279,12 +279,12 @@ def extract_keyword_and_audience(responses, batch_size=10):
 
 예시Output:
 [
-  {"response": "응답1", "keywords": ["키워드1","키워드2"], "audience": "청소년"},
+  {{"response": "응답1", "keywords": ["키워드1","키워드2"], "audience": "청소년"}},
   ...
 ]
 
 응답 목록:
-{chr(10).join(f'{j+1}. {txt}' for j, txt in enumerate(batch))}
+{chr(10).join(f"{j+1}. {txt}" for j, txt in enumerate(batch))}
 """
         resp = client.chat.completions.create(
             model="gpt-4.1-mini-2025-04-14",
@@ -301,11 +301,11 @@ def extract_keyword_and_audience(responses, batch_size=10):
             for txt in batch:
                 kws = split_keywords_simple(txt)
                 audience = '일반'
-                for w in ['어린이','초등']: 
+                for w in ['어린이','초등']:
                     if w in txt: audience='아동'
-                for w in ['유아','미취학','그림책']: 
+                for w in ['유아','미취학','그림책']:
                     if w in txt: audience='유아'
-                for w in ['청소년','진로','자기계발']: 
+                for w in ['청소년','진로','자기계발']:
                     if w in txt: audience='청소년'
                 data.append({
                     'response': txt,
