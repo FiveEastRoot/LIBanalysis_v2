@@ -300,7 +300,7 @@ def extract_keyword_and_audience(responses, batch_size=20):  # 배치 크기 증
 {chr(10).join(f"{j+1}. {txt}" for j, txt in enumerate(batch))}
 """
         resp = client.chat.completions.create(
-            model="gpt-3.5-turbo"  # 빠른 처리 위해 모델을 낮춰 사용,
+            model="gpt-3.5-turbo",  # 빠른 처리 위해 모델을 낮춰 사용,
             messages=[{"role": "system", "content": prompt}],
             temperature=0.2,
             max_tokens=300  # 토큰 제한 축소로 처리 시간 단축
