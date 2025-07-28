@@ -277,20 +277,12 @@ def is_trivial(text):
 
 # 단순 분할(Fallback)
 def split_keywords_simple(text):
-    # 문장 단위로 분할 (마침표, 쉼표, 세미콜론 기준)
-    parts = [p.strip() for p in re.split(r"[.,;]+", text) if p.strip()]
-    filtered = []
-    for part in parts:
-        # 특수문자 제거
-        p = re.sub(r"[^\\w가-힣 ]", "", part).strip()
-        # 길이 기준 및 KDC 매핑 가능한 부분만 남김
-        if len(p) >= 2 and map_keyword_to_category(p) != "해당없음":
-            filtered.append(p)
-    return filtered
+    parts = re.split(r"[.,/\s]+", text)
+    return [p.strip() for p in parts if len(p.strip()) > 1]
 
 # 통합 추출: 키워드 + 대상범주
 @st.cache_data(show_spinner=False)
-def extract_keyword_and_audience(responses, batch_size=8):  # 배치 크기 축소로 응답 지연 개선  # 배치 크기 축소로 응답 지연 개선
+def extract_keyword_and_audience(responses, batch_size=20):  # 배치 크기 증가로 호출 횟수 감소:  # 배치 크기 축소로 응답 지연 개선  # 배치 크기 축소로 응답 지연 개선
     results = []
     for i in range(0, len(responses), batch_size):
         batch = responses[i:i+batch_size]
@@ -308,7 +300,7 @@ def extract_keyword_and_audience(responses, batch_size=8):  # 배치 크기 축�
 {chr(10).join(f"{j+1}. {txt}" for j, txt in enumerate(batch))}
 """
         resp = client.chat.completions.create(
-            model="gpt-4.1-mini-2025-04-14",
+            model="gpt-3.5-turbo"  # 빠른 처리 위해 모델을 낮춰 사용,
             messages=[{"role": "system", "content": prompt}],
             temperature=0.2,
             max_tokens=300  # 토큰 제한 축소로 처리 시간 단축
@@ -375,6 +367,7 @@ def process_answers(responses):
                 '대상범주': aud
             })
     return pd.DataFrame(processed)
+
 
 
 # 시각화 페이지 함수
