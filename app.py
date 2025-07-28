@@ -98,7 +98,7 @@ def plot_bq2_bar(df, question):
         header=dict(values=[""] + list(table_df.columns), align='center', height=36, font=dict(size=11)),
         cells=dict(values=[table_df.index] + [table_df[col].tolist() for col in table_df.columns], align='center', height=36, font=dict(size=11))
     ))
-    table_fig.update_layout(height=100, margin=dict(t=10, b=5))
+    table_fig.update_layout(height=120, margin=dict(t=10, b=5))
 
     return fig, table_fig
 
