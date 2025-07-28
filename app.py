@@ -5,8 +5,8 @@ import plotly.express as px
 import re
 import openai
 
-client = openai.OpenAI(api_key=st.secrets["openai"]["api_key"])
-
+openai.api_key = st.secrets["openai"]["api_key"]
+client = openai.OpenAI(api_key=openai.api_key)
 
 # ─────────────────────────────────────────────────────
 # 공통 유틸
@@ -15,7 +15,6 @@ def remove_parentheses(text):
     return re.sub(r'\(.*?\)', '', text).strip()
 def wrap_label(label, width=10):
     return '<br>'.join([label[i:i+width] for i in range(0, len(label), width)])
-
 # ─────────────────────────────────────────────────────
 # SQ2: 연령 히스토그램 + Table
 # ─────────────────────────────────────────────────────
@@ -259,84 +258,101 @@ KDC_KEYWORD_MAP = {
     '해당없음': []
 }
 
-def map_keyword_to_category(keyword):
-    for category, keywords in KDC_KEYWORD_MAP.items():
-        if any(k in keyword for k in keywords):
-            return category
-    return "해당없음"
-
-def infer_audience(keyword):
-    kw = keyword.lower()
-    if any(x in kw for x in ["유아", "미취학", "그림책"]): return "유아"
-    if any(x in kw for x in ["아동", "초등", "동화"]): return "아동"
-    if any(x in kw for x in ["청소년", "진로", "자기계발", "고학년", "중학생", "고등학생"]): return "청소년"
-    return "일반"
-
+# 응답이 trivial 한지 검사
 def is_trivial(text):
     text = str(text).strip()
-    return text in ["", "X", "x", "감사합니다", "감사", "잘하고 있어요", "없음", "사서가 잘하고 있어요", "잘 하고 있다"]
+    return text in ["", "X", "x", "감사합니다", "감사", "없음"]
 
-def extract_keywords_gpt(responses, batch_size=10):
-    all_keywords = []
+# 단순 분할(Fallback)
+def split_keywords_simple(text):
+    parts = re.split(r"[.,/\s]+", text)
+    return [p.strip() for p in parts if len(p.strip()) > 1]
+
+# 통합 추출: 키워드 + 대상범주
+def extract_keyword_and_audience(responses, batch_size=10):
+    results = []
     for i in range(0, len(responses), batch_size):
         batch = responses[i:i+batch_size]
         prompt = f"""
-당신은 도서관 자유응답에서 도서 주제 키워드를 뽑는 AI입니다.
-각 응답마다 1~3개의 주제 키워드를 콤마로 추출해주세요.
+당신은 도서관 자유응답에서 아래 형식의 JSON 배열만 반환합니다.
+각 객체는 응답, 키워드 목록(1~3개), 대상층(유아/아동/청소년/일반)을 포함해야 합니다.
 
-{chr(10).join(f"{j+1}. {txt}" for j, txt in enumerate(batch))}
+예시Output:
+[
+  {"response": "응답1", "keywords": ["키워드1","키워드2"], "audience": "청소년"},
+  ...
+]
+
+응답 목록:
+{chr(10).join(f'{j+1}. {txt}' for j, txt in enumerate(batch))}
 """
-        # ✅ 이 부분을 수정했습니다.
-        response = client.chat.completions.create(
+        resp = client.chat.completions.create(
             model="gpt-4.1-mini-2025-04-14",
             messages=[{"role": "system", "content": prompt}],
             temperature=0.2,
-            max_tokens=300
+            max_tokens=800
         )
-        lines = response.choices[0].message.content.strip().splitlines()
-        for line in lines:
-            parts = line.split('.', 1)
-            kws = [k.strip() for k in parts[1].split(',')] if len(parts) == 2 else []
-            all_keywords.append(kws)
-    return all_keywords
+        content = resp.choices[0].message.content.strip()
+        try:
+            data = pd.read_json(content)
+        except Exception:
+            # fallback: 수동 분할 + 기본 규칙
+            data = []
+            for txt in batch:
+                kws = split_keywords_simple(txt)
+                audience = '일반'
+                for w in ['어린이','초등']: 
+                    if w in txt: audience='아동'
+                for w in ['유아','미취학','그림책']: 
+                    if w in txt: audience='유아'
+                for w in ['청소년','진로','자기계발']: 
+                    if w in txt: audience='청소년'
+                data.append({
+                    'response': txt,
+                    'keywords': kws,
+                    'audience': audience
+                })
+            data = pd.DataFrame(data)
+        for _, row in data.iterrows():
+            results.append((row['response'], row['keywords'], row['audience']))
+    return results
+
+# 전체 응답 처리
+import math
 
 def process_answers(responses):
-    responses_clean = [r for r in responses if not is_trivial(r)]
-    keyword_batches = extract_keywords_gpt(responses_clean)
-    rows = []
-    for ans, kws in zip(responses_clean, keyword_batches):
+    processed = []
+    # 통합 호출 횟수 계산
+    batches = extract_keyword_and_audience(responses, batch_size=20)
+    for resp, kws, aud in batches:
+        if is_trivial(resp):
+            continue
+        if not kws:
+            kws = split_keywords_simple(resp)
         for kw in kws:
             cat = map_keyword_to_category(kw)
-            aud = infer_audience(kw)
-            if cat == "해당없음" and aud == "일반":
+            if cat=='해당없음' and aud=='일반':
                 continue
-            rows.append({
-                "응답": ans,
-                "키워드": kw,
-                "주제범주": cat,
-                "대상범주": aud
+            processed.append({
+                '응답': resp,
+                '키워드': kw,
+                '주제범주': cat,
+                '대상범주': aud
             })
-    return pd.DataFrame(rows)
+    return pd.DataFrame(processed)
 
-# ─────────────────────────────────────────────────────
-# ✅ 시각화 페이지 함수
+# 시각화 페이지 함수
 def show_short_answer_keyword_analysis(df_result):
     st.subheader("📘 Q9-DS-4 단문 응답 키워드 분석")
-
-    KDC_ORDER = list(KDC_KEYWORD_MAP.keys())
-    df_cat = df_result.groupby("주제범주")["키워드"].count().reset_index(name="키워드 수")
-    df_cat["주제범주"] = pd.Categorical(df_cat["주제범주"], categories=KDC_ORDER, ordered=True)
-    df_cat = df_cat.sort_values("주제범주")
-
-    fig1 = px.bar(df_cat, x="주제범주", y="키워드 수", title="주제범주별 키워드 빈도 (KDC 순)", text="키워드 수")
-    fig1.update_traces(textposition="outside")
-    st.plotly_chart(fig1, use_container_width=True)
-
-    df_aud = df_result.groupby("대상범주")["키워드"].count().reset_index(name="키워드 수")
-    fig2 = px.bar(df_aud, x="대상범주", y="키워드 수", title="대상범주별 키워드 빈도", text="키워드 수", color="대상범주")
+    order = list(KDC_KEYWORD_MAP.keys())
+    df_cat = df_result.groupby("주제범주")["키워드"].count().reindex(order, fill_value=0).reset_index(name="빈도수")
+    fig = px.bar(df_cat, x="주제범주", y="빈도수", title="주제범주별 키워드 빈도", text="빈도수")
+    fig.update_traces(textposition="outside")
+    st.plotly_chart(fig, use_container_width=True)
+    df_aud = df_result.groupby("대상범주")["키워드"].count().reset_index(name="빈도수")
+    fig2 = px.bar(df_aud, x="대상범주", y="빈도수", title="대상범주별 키워드 빈도", text="빈도수", color="대상범주")
     fig2.update_traces(textposition="outside")
     st.plotly_chart(fig2, use_container_width=True)
-
     st.markdown("#### 🔍 분석 결과 테이블")
     st.dataframe(df_result[["응답", "키워드", "주제범주", "대상범주"]])
 
