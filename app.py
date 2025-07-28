@@ -1,0 +1,451 @@
+import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
+import re
+import openai
+
+client = openai.OpenAI(api_key=st.secrets["openai"]["api_key"])
+
+
+# ─────────────────────────────────────────────────────
+# 공통 유틸
+# ─────────────────────────────────────────────────────
+def remove_parentheses(text):
+    return re.sub(r'\(.*?\)', '', text).strip()
+def wrap_label(label, width=10):
+    return '<br>'.join([label[i:i+width] for i in range(0, len(label), width)])
+
+# ─────────────────────────────────────────────────────
+# SQ2: 연령 히스토그램 + Table
+# ─────────────────────────────────────────────────────
+def plot_age_histogram_with_labels(df, question):
+    data = df[question].dropna().astype(str).str.extract(r'(\d+)')
+    data.columns = ['age']
+    data['age'] = pd.to_numeric(data['age'], errors='coerce').dropna()
+
+    def age_group(age):
+        if age < 15: return '14세 이하'
+        elif age >= 80: return '80세 이상'
+        else: return f"{(age//5)*5}~{(age//5)*5+4}세"
+
+    data['group'] = data['age'].apply(age_group)
+    grouped = data['group'].value_counts().sort_index()
+    percent = (grouped / grouped.sum() * 100).round(1)
+
+    # Bar
+    fig = go.Figure(go.Bar(
+        x=grouped.index, y=grouped.values,
+        text=grouped.values, textposition='outside',
+        marker_color="#1f77b4"
+    ))
+    fig.update_layout(
+        title=question, xaxis_title="연령대", yaxis_title="응답 수",
+        bargap=0.2, height=300, margin=dict(t=40, b=20)
+    )
+
+    # Table
+    table_df = pd.DataFrame({'응답 수': grouped, '비율 (%)': percent}).T
+    table_fig = go.Figure(go.Table(
+        header=dict(values=[""]+list(table_df.columns)),
+        cells=dict(values=[table_df.index] + [table_df[c].tolist() for c in table_df.columns])
+    ))
+    table_fig.update_layout(height=180, margin=dict(t=10, b=5))
+
+    return fig, table_fig
+
+# ─────────────────────────────────────────────────────
+# BQ2: 직업군 Bar + Table
+# ─────────────────────────────────────────────────────
+def plot_bq2_bar(df, question):
+    data = df[question].dropna().astype(str)
+    counts_raw = data.value_counts()
+    percent_raw = (counts_raw / counts_raw.sum() * 100).round(1)
+
+    categories_raw = counts_raw.index.tolist()
+    categories = [label.split('. ', 1)[-1] for label in categories_raw]
+    counts = counts_raw.values
+    percent = percent_raw.values
+
+    # ✅ 자동 줄바꿈 적용
+    wrapped_labels = [wrap_label(remove_parentheses(label), width=10) for label in categories]
+
+    colors = px.colors.qualitative.Plotly
+    fig = go.Figure(go.Bar(
+        x=categories,
+        y=counts,
+        text=counts,
+        textposition='outside',
+        marker_color=colors[:len(categories)]
+    ))
+
+    y_max = counts.max() + 20
+    fig.update_layout(
+        title=dict(text=question, font=dict(size=16)),
+        yaxis=dict(title="응답 수", range=[0, y_max]),
+        height=420,
+        margin=dict(t=50, b=100),
+        xaxis_tickangle=-30
+    )
+
+    # ✅ 자동 줄바꿈된 레이블을 표에 사용
+    table_df = pd.DataFrame({
+        '응답 수': counts,
+        '비율 (%)': percent
+    }, index=wrapped_labels).T
+
+    table_fig = go.Figure(go.Table(
+        header=dict(values=[""] + list(table_df.columns), align='center', height=36, font=dict(size=11)),
+        cells=dict(values=[table_df.index] + [table_df[col].tolist() for col in table_df.columns], align='center', height=36, font=dict(size=11))
+    ))
+    table_fig.update_layout(height=100, margin=dict(t=10, b=5))
+
+    return fig, table_fig
+
+# ─────────────────────────────────────────────────────
+# SQ4: 커스텀 누적 가로 Bar + Table
+# ─────────────────────────────────────────────────────
+def plot_sq4_custom_bar(df, question):
+    data = df[question].dropna().astype(str)
+    cats = sorted(data.unique())
+    counts = data.value_counts().reindex(cats).fillna(0).astype(int)
+    percent = (counts/counts.sum()*100).round(1)
+    labels = [wrap_label(remove_parentheses(x),10) for x in cats]
+    colors = px.colors.qualitative.Plotly
+
+    fig = go.Figure()
+    for i, cat in enumerate(cats):
+        fig.add_trace(go.Bar(
+            x=[percent[cat]], y=[question],
+            orientation='h', name=remove_parentheses(cat),
+            marker_color=colors[i%len(colors)],
+            text=f"{percent[cat]}%", textposition='inside'
+        ))
+    fig.update_layout(
+        barmode='stack', showlegend=True,
+        legend=dict(orientation='h', y=-1, x=0.5, xanchor='center', traceorder='reversed'),
+        title=question, xaxis_title="비율 (%)", yaxis=dict(showticklabels=False),
+        height=250, margin=dict(t=40,b=100)
+    )
+
+    table_df = pd.DataFrame({'응답 수':[counts[c] for c in cats],'비율 (%)':[percent[c] for c in cats]}, index=labels).T
+    table_fig = go.Figure(go.Table(
+        header=dict(values=[""]+list(table_df.columns)),
+        cells=dict(values=[table_df.index]+[table_df[c].tolist() for c in table_df.columns])
+    ))
+    table_fig.update_layout(height=100, margin=dict(t=10,b=5))
+    return fig, table_fig
+
+# ─────────────────────────────────────────────────────
+# 일반 범주형 누적 Bar + Table
+# ─────────────────────────────────────────────────────
+def plot_categorical_stacked_bar(df, question):
+    data = df[question].dropna().astype(str)
+    categories_raw = sorted(data.unique())
+    categories = [label.split('. ', 1)[-1] for label in categories_raw]
+
+    counts = data.value_counts().reindex(categories_raw).fillna(0).astype(int)
+    percent = (counts / counts.sum() * 100).round(1)
+    colors = px.colors.qualitative.Plotly
+
+    fig = go.Figure()
+    for i, cat in enumerate(reversed(categories)):
+        raw_cat = categories_raw[categories.index(cat)]
+        fig.add_trace(go.Bar(
+            x=[percent[raw_cat]],
+            y=[question],
+            orientation='h',
+            name=cat,
+            marker=dict(color=colors[i % len(colors)]),
+            text=f"{percent[raw_cat]}%",
+            textposition='inside',
+            insidetextanchor='middle',
+            hoverinfo='x+name'
+        ))
+
+    fig.update_layout(
+        barmode='stack',
+        showlegend=True,
+        legend=dict(
+            orientation='h',
+            yanchor='bottom',
+            y=-0.6,
+            xanchor='center',
+            x=0.5,
+            traceorder='reversed'
+        ),
+        title=dict(text=question, font=dict(size=16)),
+        yaxis=dict(showticklabels=False),
+        height=250,
+        margin=dict(t=40, b=100)
+    )
+
+    table_df = pd.DataFrame({
+        '응답 수': [counts[c] for c in categories_raw],
+        '비율 (%)': [percent[c] for c in categories_raw]
+    }, index=categories).T
+    table_fig = go.Figure(go.Table(
+        header=dict(values=[""] + list(table_df.columns), align='center'),
+        cells=dict(values=[table_df.index] + [table_df[col].tolist() for col in table_df.columns], align='center')
+    ))
+    table_fig.update_layout(height=120, margin=dict(t=10, b=5))
+    return fig, table_fig
+
+
+# ─────────────────────────────────────────────────────
+# Q1~Q9-D: 7점 척도 스택형 바 + Table
+# ─────────────────────────────────────────────────────
+def plot_stacked_bar_with_table(df, question):
+    data = pd.to_numeric(df[question].dropna(), errors='coerce').dropna().astype(int)
+    order = [1,2,3,4,5,6,7]
+    counts = data.value_counts().reindex(order, fill_value=0)
+    percent = (counts / counts.sum() * 100).round(1)
+
+    colors = {
+        1: "#d73027", 2: "#fc8d59", 3: "#fee090",
+        4: "#dddddd", 5: "#91bfdb", 6: "#4575b4", 7: "#313695"
+    }
+    # Bar
+    fig = go.Figure()
+    for v in order:
+        fig.add_trace(go.Bar(
+            x=[percent[v]], y=[question],
+            orientation='h',
+            name=f"{v}점",
+            marker_color=colors[v],
+            text=f"{percent[v]}%", textposition='inside'
+        ))
+    fig.update_layout(
+        barmode='stack', showlegend=False,
+        title=question,
+        xaxis_title="매우 불만족 → 매우 만족",
+        yaxis=dict(showticklabels=False),
+        height=180, margin=dict(t=40,b=2)
+    )
+
+    # Table
+    table_df = pd.DataFrame({
+        '응답 수': [int(counts[v]) for v in order],
+        '비율 (%)': [percent[v] for v in order]
+    }, index=[f"{v}점" for v in order]).T
+
+    table_fig = go.Figure(go.Table(
+        header=dict(values=[""] + list(table_df.columns), align='center'),
+        cells=dict(values=[table_df.index] + [table_df[c].tolist() for c in table_df.columns], align='center')
+    ))
+    table_fig.update_layout(height=80, margin=dict(t=10,b=0))
+
+    return fig, table_fig
+
+
+#--------------------------------------------------------------------------
+#단문 분석
+#----------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────
+# 🔧 KDC 매핑 및 분석 유틸
+KDC_KEYWORD_MAP = {
+    '000 총류': ["백과사전", "도서관", "독서", "문헌정보", "기록", "출판", "서지"],
+    '100 철학': ["철학", "명상", "윤리", "논리학", "심리학"],
+    '200 종교': ["종교", "기독교", "불교", "천주교", "신화", "신앙", "종교학"],
+    '300 사회과학': ["사회", "정치", "경제", "법률", "행정", "교육", "복지", "여성", "노인", "육아", "아동복지", "사회문제", "노동", "환경문제", "인권"],
+    '400 자연과학': ["수학", "물리", "화학", "생물", "지구과학", "과학", "천문", "기후", "의학", "생명과학"],
+    '500 기술과학': ["건강", "의료", "요리", "간호", "공학", "컴퓨터", "AI", "IT", "농업", "축산", "산업", "기술", "미용"],
+    '600 예술': ["미술", "음악", "무용", "사진", "영화", "연극", "디자인", "공예", "예술", "문화예술"],
+    '700 언어': ["언어", "국어", "영어", "일본어", "중국어", "외국어", "한자", "문법"],
+    '800 문학': ["소설", "시", "수필", "에세이", "희곡", "문학", "동화", "웹툰", "판타지", "문예"],
+    '900 역사·지리': ["역사", "지리", "한국사", "세계사", "여행", "문화유산", "관광"],
+    '원서(영어)': ["원서", "영문도서", "영문판", "영어원서"],
+    '연속간행물': ["잡지", "간행물", "연속간행물"],
+    '해당없음': []
+}
+
+def map_keyword_to_category(keyword):
+    for category, keywords in KDC_KEYWORD_MAP.items():
+        if any(k in keyword for k in keywords):
+            return category
+    return "해당없음"
+
+def infer_audience(keyword):
+    kw = keyword.lower()
+    if any(x in kw for x in ["유아", "미취학", "그림책"]): return "유아"
+    if any(x in kw for x in ["아동", "초등", "동화"]): return "아동"
+    if any(x in kw for x in ["청소년", "진로", "자기계발", "고학년", "중학생", "고등학생"]): return "청소년"
+    return "일반"
+
+def is_trivial(text):
+    text = str(text).strip()
+    return text in ["", "X", "x", "감사합니다", "감사", "잘하고 있어요", "없음", "사서가 잘하고 있어요", "잘 하고 있다"]
+
+def extract_keywords_gpt(responses, batch_size=10):
+    all_keywords = []
+    for i in range(0, len(responses), batch_size):
+        batch = responses[i:i+batch_size]
+        prompt = f"""
+당신은 도서관 자유응답에서 도서 주제 키워드를 뽑는 AI입니다.
+각 응답마다 1~3개의 주제 키워드를 콤마로 추출해주세요.
+
+{chr(10).join(f"{j+1}. {txt}" for j, txt in enumerate(batch))}
+"""
+        # ✅ 이 부분을 수정했습니다.
+        response = client.chat.completions.create(
+            model="gpt-4.1-mini-2025-04-14",
+            messages=[{"role": "system", "content": prompt}],
+            temperature=0.2,
+            max_tokens=300
+        )
+        lines = response.choices[0].message.content.strip().splitlines()
+        for line in lines:
+            parts = line.split('.', 1)
+            kws = [k.strip() for k in parts[1].split(',')] if len(parts) == 2 else []
+            all_keywords.append(kws)
+    return all_keywords
+
+def process_answers(responses):
+    responses_clean = [r for r in responses if not is_trivial(r)]
+    keyword_batches = extract_keywords_gpt(responses_clean)
+    rows = []
+    for ans, kws in zip(responses_clean, keyword_batches):
+        for kw in kws:
+            cat = map_keyword_to_category(kw)
+            aud = infer_audience(kw)
+            if cat == "해당없음" and aud == "일반":
+                continue
+            rows.append({
+                "응답": ans,
+                "키워드": kw,
+                "주제범주": cat,
+                "대상범주": aud
+            })
+    return pd.DataFrame(rows)
+
+# ─────────────────────────────────────────────────────
+# ✅ 시각화 페이지 함수
+def show_short_answer_keyword_analysis(df_result):
+    st.subheader("📘 Q9-DS-4 단문 응답 키워드 분석")
+
+    KDC_ORDER = list(KDC_KEYWORD_MAP.keys())
+    df_cat = df_result.groupby("주제범주")["키워드"].count().reset_index(name="키워드 수")
+    df_cat["주제범주"] = pd.Categorical(df_cat["주제범주"], categories=KDC_ORDER, ordered=True)
+    df_cat = df_cat.sort_values("주제범주")
+
+    fig1 = px.bar(df_cat, x="주제범주", y="키워드 수", title="주제범주별 키워드 빈도 (KDC 순)", text="키워드 수")
+    fig1.update_traces(textposition="outside")
+    st.plotly_chart(fig1, use_container_width=True)
+
+    df_aud = df_result.groupby("대상범주")["키워드"].count().reset_index(name="키워드 수")
+    fig2 = px.bar(df_aud, x="대상범주", y="키워드 수", title="대상범주별 키워드 빈도", text="키워드 수", color="대상범주")
+    fig2.update_traces(textposition="outside")
+    st.plotly_chart(fig2, use_container_width=True)
+
+    st.markdown("#### 🔍 분석 결과 테이블")
+    st.dataframe(df_result[["응답", "키워드", "주제범주", "대상범주"]])
+
+
+#-----------------------------------------------------------------------------
+#페이지 구분
+def page_home(df):
+    st.subheader("👤 인구통계 문항 (SQ1~6, BQ1~2)")
+    soc_qs = [c for c in df.columns if c.startswith("SQ") or c.startswith("BQ")]
+    for q in soc_qs:
+        try:
+            if q.startswith("SQ2"):
+                bar, tbl = plot_age_histogram_with_labels(df, q)
+            elif q.startswith("BQ2"):
+                bar, tbl = plot_bq2_bar(df, q)
+            elif q.startswith("SQ4"):
+                bar, tbl = plot_sq4_custom_bar(df, q)
+            else:
+                bar, tbl = plot_categorical_stacked_bar(df, q)
+            st.markdown(f"##### {q}")
+            st.plotly_chart(bar, use_container_width=True)
+            st.plotly_chart(tbl, use_container_width=True)
+            st.divider()
+        except Exception as e:
+            st.error(f"{q} 에러: {e}")
+
+def page_basic_vis(df):
+    st.subheader("📈 7점 척도 만족도 문항 (Q1~Q9-D)")
+    # ─── likert_qs 수정 ───
+    likert_qs = [
+        col for col in df.columns
+        if (re.match(r"Q[1-9][\.-]", str(col))  # Q1-, Q1. 모두 매칭
+            or col.startswith("Q9-D"))
+    ]
+    # ─────────────────────
+
+    section_mapping = {
+        "공간 및 이용편의성":       [q for q in likert_qs if q.startswith("Q1-")],
+        "정보 획득 및 활용":       [q for q in likert_qs if q.startswith("Q2-")],
+        "소통 및 정책 활용":       [q for q in likert_qs if q.startswith("Q3-")],
+        "문화·교육 향유":         [q for q in likert_qs if q.startswith("Q4-")],
+        "사회적 관계 형성":       [q for q in likert_qs if q.startswith("Q5-")],
+        "개인의 삶과 역량":       [q for q in likert_qs if q.startswith("Q6-")],
+        "도서관의 공익성 및 기여도": [
+            q for q in likert_qs 
+            if q.startswith("Q7-") or q.startswith("Q8")  # 이제 Q8. 문항도 포함
+        ],
+        "자치구 구성 문항":       [
+            q for q in likert_qs 
+            if q.startswith("Q9-") and not q.startswith("Q9-DS")
+        ],
+    }
+
+    tabs = st.tabs(list(section_mapping.keys()))
+    for tab, section_name in zip(tabs, section_mapping.keys()):
+        with tab:
+            st.markdown(f"### {section_name}")
+            for q in section_mapping[section_name]:
+                bar, tbl = plot_stacked_bar_with_table(df, q)
+                st.plotly_chart(bar, use_container_width=True)
+                st.plotly_chart(tbl, use_container_width=True)
+
+#------------- 단문분석
+def page_short_keyword(df):
+    st.subheader("📘 Q9-DS-4 단문 응답 키워드 분석")
+
+    with st.spinner("🔍 GPT 기반 키워드 분석 중..."):
+        target_cols = [col for col in df.columns if "Q9-DS-4" in col]
+        if not target_cols:
+            st.warning("Q9-DS-4 관련 문항을 찾을 수 없습니다.")
+            return
+        answers = df[target_cols[0]].dropna().astype(str).tolist()
+        df_result = process_answers(answers)
+        show_short_answer_keyword_analysis(df_result)
+
+
+# ─────────────────────────────────────────────────────
+# ▶️ Streamlit 실행
+# ─────────────────────────────────────────────────────
+# ▼ 기존 Streamlit 실행부 아래를 이렇게 수정하세요 ▼
+
+st.set_page_config(
+    page_title="서울시 공공도서관 설문 시각화 대시보드",
+    layout="wide"
+)
+
+uploaded = st.file_uploader("📂 엑셀(.xlsx) 파일 업로드", type=["xlsx"])
+if not uploaded:
+    st.info("데이터 파일을 업로드해 주세요.")
+    st.stop()
+
+df = pd.read_excel(uploaded)
+st.success("✅ 업로드 완료")
+
+# ✅ 상단 탭으로 대체
+tabs = st.tabs(["👤 응답자 정보", "📈 만족도 기본 시각화", "📘 단문 응답 키워드 분석"])
+
+with tabs[0]:
+    page_home(df)
+
+with tabs[1]:
+    page_basic_vis(df)
+
+with tabs[2]:
+    with st.spinner("🔍 GPT 기반 키워드 분석 중..."):
+        target_cols = [col for col in df.columns if "Q9-DS-4" in col]
+        if not target_cols:
+            st.warning("Q9-DS-4 관련 문항을 찾을 수 없습니다.")
+        else:
+            answers = df[target_cols[0]].dropna().astype(str).tolist()
+            df_result = process_answers(answers)
+            show_short_answer_keyword_analysis(df_result)
