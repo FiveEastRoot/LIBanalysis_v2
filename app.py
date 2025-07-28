@@ -263,6 +263,18 @@ def is_trivial(text):
     text = str(text).strip()
     return text in ["", "X", "x", "감사합니다", "감사", "없음"]
 
+# 주제범주 매핑
+def map_keyword_to_category(keyword):
+    for cat, kws in KDC_KEYWORD_MAP.items():
+        if any(k in keyword for k in kws):
+            return cat
+    return "해당없음"
+
+# 단순 분할(Fallback)
+def is_trivial(text):
+    text = str(text).strip()
+    return text in ["", "X", "x", "감사합니다", "감사", "없음"]
+
 # 단순 분할(Fallback)
 def split_keywords_simple(text):
     parts = re.split(r"[.,/\s]+", text)
