@@ -449,6 +449,83 @@ def page_short_keyword(df):
 
 
 # ─────────────────────────────────────────────────────
+# DQ1: 도서관 월평균 이용횟수 (연 기준 환산 + 사용자 구간)
+# ─────────────────────────────────────────────────────
+def plot_dq1(df, question="DQ1. 2024년 기준 도서관을 월 평균 몇 회 이용하셨습니까?"):
+    # 숫자만 뽑아서 월별 값으로 변환
+    data = df[question].dropna().astype(str).str.extract(r'(\d+\.?\d*)')
+    data.columns = ['monthly']
+    data['monthly'] = pd.to_numeric(data['monthly'], errors='coerce')
+    # 연 기준 환산
+    data['yearly'] = data['monthly'] * 12
+
+    # 사용자 구간 함수
+    def categorize_usage(freq):
+        try:
+            f = float(freq)
+        except:
+            return None
+        if f < 12:            return "0~11회: 연 1회 미만"
+        elif f < 24:          return "12~23회: 월 1회 정도"
+        elif f < 48:          return "24~47회: 월 2~4회 정도"
+        elif f < 72:          return "48~71회: 주 1회 정도"
+        elif f < 144:         return "72~143회: 주 2~3회"
+        else:                 return "144회 이상: 거의 매일"
+
+    data['category'] = data['yearly'].apply(categorize_usage)
+    order = [
+        "0~11회: 연 1회 미만",
+        "12~23회: 월 1회 정도",
+        "24~47회: 월 2~4회 정도",
+        "48~71회: 주 1회 정도",
+        "72~143회: 주 2~3회",
+        "144회 이상: 거의 매일"
+    ]
+    grouped = data['category']\
+        .value_counts()\
+        .reindex(order, fill_value=0)
+
+    percent = (grouped / grouped.sum() * 100).round(1)
+
+    # ─── 막대그래프
+    fig = go.Figure(go.Bar(
+        x=grouped.index,
+        y=grouped.values,
+        text=grouped.values,
+        textposition='outside',
+        marker_color="#1f77b4"
+    ))
+    fig.update_layout(
+        title=f"{question} (연 기준 환산 + 사용자 구간)",
+        xaxis_title="이용 빈도 구간",
+        yaxis_title="응답 수",
+        bargap=0.2,
+        height=400,
+        margin=dict(t=50, b=100),
+        xaxis_tickangle=-15
+    )
+
+    # ─── 테이블
+    table_df = pd.DataFrame({
+        "응답 수": grouped,
+        "비율 (%)": percent
+    }).T
+    table_fig = go.Figure(go.Table(
+        header=dict(
+            values=[""] + list(table_df.columns),
+            align='center', height=30, font=dict(size=11)
+        ),
+        cells=dict(
+            values=[table_df.index] + [table_df[c].tolist() for c in table_df.columns],
+            align='center', height=30, font=dict(size=11)
+        )
+    ))
+    table_fig.update_layout(height=250, margin=dict(t=10, b=5))
+
+    return fig, table_fig
+
+
+# ─────────────────────────────────────────────────────
 # ▶️ Streamlit 실행
 # ─────────────────────────────────────────────────────
 st.set_page_config(
@@ -469,6 +546,7 @@ main_tabs = st.tabs([
     "👤 응답자 정보",
     "📈 만족도 기본 시각화",
     "🗺️ 자치구 구성 문항",
+    "📊도서관 이용양태 분"
 ])
 
 # 1) 응답자 정보
@@ -516,3 +594,12 @@ with main_tabs[2]:
             answers = df[long_cols[0]].dropna().astype(str).tolist()
             df_long = process_answers(answers)
             show_short_answer_keyword_analysis(df_long)
+# 4) 도서관 이용양태 분
+with main_tabs[3]:
+    st.header("📊 도서관 이용양태 분석")
+
+    # 4-1) DQ1: 월평균 이용횟수 (연환산 + 구간화)
+    st.subheader("DQ1. 월평균 도서관 이용횟수 (연 기준 환산 + 구간)")
+    dq1_fig, dq1_tbl = plot_dq1(df)
+    st.plotly_chart(dq1_fig, use_container_width=True)
+    st.plotly_chart(dq1_tbl, use_container_width=True)
