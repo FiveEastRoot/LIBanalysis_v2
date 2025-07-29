@@ -88,14 +88,15 @@ def plot_bq2_bar(df, question):
         xaxis_tickangle=-30
     )
 
-    # 자동 줄바꿈된 레이블을 표에 사용
-    table_df = pd.DataFrame({'응답 수': counts, '비율 (%)': percent}, index=wrapped_labels).T
+    table_df = pd.DataFrame({
+        '응답 수': [counts[c] for c in categories_raw],
+        '비율 (%)': [percent[c] for c in categories_raw]
+    }, index=categories).T
     table_fig = go.Figure(go.Table(
-        header=dict(values=[""] + list(table_df.columns), align='center', height=36, font=dict(size=11)),
-        cells=dict(values=[table_df.index] + [table_df[col].tolist() for col in table_df.columns], align='center', height=36, font=dict(size=11))
+        header=dict(values=[""] + list(table_df.columns), align='center'),
+        cells=dict(values=[table_df.index] + [table_df[col].tolist() for col in table_df.columns], align='center')
     ))
-    table_fig.update_layout(height=150, margin=dict(t=10, b=5))
-
+    table_fig.update_layout(height=120, margin=dict(t=10, b=5))
     return fig, table_fig
 
 # ─────────────────────────────────────────────────────
