@@ -523,6 +523,76 @@ def plot_dq1(df, question="DQ1. 2024년 기준 도서관을 월 평균 몇 회 �
     table_fig.update_layout(height=250, margin=dict(t=10, b=5))
 
     return fig, table_fig
+# ─────────────────────────────────────────────────────
+# DQ2: 도서관 이용기간 (년 단위 올림)
+# ─────────────────────────────────────────────────────
+def plot_dq2(df,
+             question="DQ2. 그동안 이용하신 모든 도서관 기준으로, 도서관 이용 기간은 어느 정도 되십니까?"):
+    import re
+
+    # 1) 텍스트 파싱 함수
+    def parse_duration(s):
+        s = str(s).strip()
+        # '2년 3개월' → 3년
+        m = re.match(r'^(\d+)\s*년\s*(\d+)\s*개월$', s)
+        if m:
+            y, mth = int(m.group(1)), int(m.group(2))
+            return y + (1 if mth > 0 else 0)
+        # '2년'
+        m = re.match(r'^(\d+)\s*년$', s)
+        if m:
+            return int(m.group(1))
+        # '6개월'
+        m = re.match(r'^(\d+)\s*개월$', s)
+        if m:
+            return 1
+        return None
+
+    # 2) 연 단위로 변환
+    durations = (
+        df[question]
+        .dropna()
+        .astype(str)
+        .apply(parse_duration)
+    )
+    grouped = durations.value_counts().sort_index()
+    percent = (grouped / grouped.sum() * 100).round(1)
+
+    # 3) 막대그래프
+    labels = [f"{y}년" for y in grouped.index]
+    fig = go.Figure(go.Bar(
+        x=labels, y=grouped.values,
+        text=grouped.values, textposition='outside',
+        marker_color="#1f77b4"
+    ))
+    fig.update_layout(
+        title=f"{question} (년 단위 올림)",
+        xaxis_title="이용 기간 (년)",
+        yaxis_title="응답 수",
+        bargap=0.2, height=400,
+        margin=dict(t=50, b=100),
+        xaxis_tickangle=-15
+    )
+
+    # 4) 응답표 (Table)
+    table_df = pd.DataFrame({
+        "응답 수": grouped,
+        "비율 (%)": percent
+    }).T
+    table_fig = go.Figure(go.Table(
+        header=dict(
+            values=[""] + labels,
+            fill_color="#f0f0f0",
+            align='center', font=dict(size=11), height=30
+        ),
+        cells=dict(
+            values=[table_df.index] + [table_df[col].tolist() for col in table_df.columns],
+            align='center', font=dict(size=10), height=28
+        )
+    ))
+    table_fig.update_layout(height=250, margin=dict(t=10, b=5))
+
+    return fig, table_fig
 
 
 # ─────────────────────────────────────────────────────
@@ -598,8 +668,16 @@ with main_tabs[2]:
 with main_tabs[3]:
     st.header("📊 도서관 이용양태 분석")
 
-    # 4-1) DQ1: 월평균 이용횟수 (연환산 + 구간화)
+    # DQ1 호출 (이미 구현된 plot_dq1)
     st.subheader("DQ1. 월평균 도서관 이용횟수 (연 기준 환산 + 구간)")
-    dq1_fig, dq1_tbl = plot_dq1(df)
-    st.plotly_chart(dq1_fig, use_container_width=True)
-    st.plotly_chart(dq1_tbl, use_container_width=True)
+    fig1, tbl1 = plot_dq1(df)
+    st.plotly_chart(fig1, use_container_width=True)
+    st.plotly_chart(tbl1, use_container_width=True)
+
+    # DQ2 호출
+    st.subheader("DQ2. 도서관 이용 기간 (년 단위 올림)")
+    fig2, tbl2 = plot_dq2(df)
+    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(tbl2, use_container_width=True)
+
+    # (원하시면 DQ3도 동일 패턴으로 plot_dq3 구현 후 추가)
