@@ -128,7 +128,7 @@ def plot_sq4_custom_bar(df, question):
     table_df = pd.DataFrame({
         '응답 수': [counts[c] for c in cats],
         '비율 (%)': [percent[c] for c in cats]
-    }, index=labels).T
+    }, index=wrapped_labels).T
     
     table_fig = go.Figure(go.Table(
         header=dict(values=[""] + list(table_df.columns), align='center', height=36, font=dict(size=11)),
