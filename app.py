@@ -615,25 +615,24 @@ with main_tabs[2]:
 with main_tabs[3]:
     st.header("📊 도서관 이용양태 분석")
 
-    # DQ1 호출 (이미 구현된 plot_dq1)
-    st.subheader("DQ1. 월평균 도서관 이용횟수 (연 기준 환산 + 구간)")
-    fig1, tbl1 = plot_dq1(df)
+# DQ1
+fig1, tbl1, q1 = plot_dq1(df)
+if fig1 is not None:
+    st.subheader(q1)
     st.plotly_chart(fig1, use_container_width=True)
     st.plotly_chart(tbl1, use_container_width=True)
 
-    # DQ2 호출
-    st.subheader("DQ2. 도서관 이용 기간 (년 단위 올림)")
-    fig2, tbl2 = plot_dq2(df)
+# DQ2
+fig2, tbl2, q2 = plot_dq2(df)
+if fig2 is not None:
+    st.subheader(q2)
     st.plotly_chart(fig2, use_container_width=True)
     st.plotly_chart(tbl2, use_container_width=True)
 
-      # DQ3 (자동 탐색)
-    st.subheader("DQ3 분석")
-    fig3, tbl3, q3 = plot_dq3(df)
-    if fig3 is None:
-        st.warning("DQ3 문항이 없습니다.")
-    else:
-        st.subheader(q3)
-        st.plotly_chart(fig3, use_container_width=True)
-        st.plotly_chart(tbl3, use_container_width=True)
+# DQ3
+fig3, tbl3, q3 = plot_dq3(df)
+if fig3 is not None:
+    st.subheader(q3)
+    st.plotly_chart(fig3, use_container_width=True)
+    st.plotly_chart(tbl3, use_container_width=True)
 
