@@ -385,7 +385,6 @@ def page_home(df):
                 bar, tbl = plot_sq4_custom_bar(df, q)
             else:
                 bar, tbl = plot_categorical_stacked_bar(df, q)
-            st.markdown(f"##### {q}")
             st.plotly_chart(bar, use_container_width=True)
             st.plotly_chart(tbl, use_container_width=True)
             st.divider()
