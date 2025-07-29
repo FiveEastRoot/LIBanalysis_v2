@@ -392,12 +392,11 @@ def page_home(df):
             st.error(f"{q} 에러: {e}")
 
 def page_basic_vis(df):
-    st.subheader("📈 7점 척도 만족도 문항 (Q1~Q9-D)")
+    st.subheader("📈 7점 척도 만족도 문항 (Q1 ~ Q8)")
     # ─── likert_qs 수정 ───
     likert_qs = [
         col for col in df.columns
-        if (re.match(r"Q[1-9][\.-]", str(col))  # Q1-, Q1. 모두 매칭
-            or col.startswith("Q9-D"))
+        if (re.match(r"Q[1-9][\.-]", str(col)))  # Q1-, Q1. 모두 매칭
     ]
     # ─────────────────────
 
