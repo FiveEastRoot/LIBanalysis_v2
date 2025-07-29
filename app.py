@@ -181,6 +181,7 @@ def plot_categorical_stacked_bar(df, question):
         '응답 수': [counts[c] for c in categories_raw],
         '비율 (%)': [percent[c] for c in categories_raw]
     }, index=categories).T
+
     table_df = table_df[table_df.columns[::-1]]
 
     table_fig = go.Figure(go.Table(
