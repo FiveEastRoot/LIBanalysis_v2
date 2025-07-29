@@ -83,7 +83,7 @@ def plot_bq2_bar(df, question):
     fig.update_layout(
         title=dict(text=question, font=dict(size=16)),
         yaxis=dict(title="응답 수", range=[0, y_max]),
-        height=420,
+        height=250,
         margin=dict(t=50, b=100),
         xaxis_tickangle=-30
     )
