@@ -430,7 +430,6 @@ def page_basic_vis(df):
 
 #------------- 단문분석
 def page_short_keyword(df):
-    st.subheader("📘 Q9-DS-4 단문 응답 키워드 분석")
 
     with st.spinner("🔍 GPT 기반 키워드 분석 중..."):
         target_cols = [col for col in df.columns if "Q9-DS-4" in col]
