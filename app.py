@@ -458,37 +458,62 @@ if not uploaded:
 df = pd.read_excel(uploaded)
 st.success("✅ 업로드 완료")
 
-# 상단 탭: 응답자정보, 만족도, 자치구 구성, 단문 키워드
-tabs = st.tabs([
+# 상단 메인 탭 정의
+main_tabs = st.tabs([
     "👤 응답자 정보",
     "📈 만족도 기본 시각화",
     "🗺️ 자치구 구성 문항",
     "📘 단문 응답 키워드 분석"
 ])
 
-# 1) 인구통계 & BQ1~2
-with tabs[0]:
+# 1) 응답자 정보
+with main_tabs[0]:
     page_home(df)
 
-# 2) Q1~Q8 기본 시각화
-with tabs[1]:
+# 2) 기본 만족도 시각화 (Q1~Q8)
+with main_tabs[1]:
     page_basic_vis(df)
 
-# 3) 자치구 구성 문항 (Q9‑D 포함 컬럼 전부)
-with tabs[2]:
-    st.subheader("🗺️ 자치구 구성 문항 (7점 척도)")
-    subregion_cols = [c for c in df.columns if "Q9-D-" in c]
-    if not subregion_cols:
-        st.error("Q9‑D- 로 시작하거나 포함하는 문항을 찾을 수 없습니다.")
-    else:
-        for idx, q in enumerate(subregion_cols):
-            bar, tbl = plot_stacked_bar_with_table(df, q)
-            st.markdown(f"##### {q}")
-            # key에 인덱스나 문항명을 포함해서 중복 방지
-            st.plotly_chart(bar, use_container_width=True, key=f"bar-{idx}-{q}")
-            st.plotly_chart(tbl, use_container_width=True, key=f"tbl-{idx}-{q}")
+# 3) 자치구 구성 문항 탭 안에 서브 탭 추가
+with main_tabs[2]:
+    st.header("🗺️ 자치구 구성 문항 분석")
+    sub_tabs = st.tabs([
+        "7점 척도 시각화",   # Q9-D-1~3
+        "단문 응답 분석",     # Q9-DS-4
+        "장문 서술형 분석"    # Q9-DS-5
+    ])
 
-# 4) 단문 응답 키워드 분석
-with tabs[3]:
+    # 3-1) 7점 척도 시각화
+    with sub_tabs[0]:
+        st.subheader("자치구 구성 문항 (7점 척도)")
+        subregion_cols = [c for c in df.columns if "Q9-D-" in c]
+        if not subregion_cols:
+            st.error("Q9-D- 로 시작하는 문항을 찾을 수 없습니다.")
+        else:
+            for idx, col in enumerate(subregion_cols):
+                bar, tbl = plot_stacked_bar_with_table(df, col)
+                st.markdown(f"##### {col}")
+                st.plotly_chart(bar, use_container_width=True, key=f"bar-{idx}-{col}")
+                st.plotly_chart(tbl, use_container_width=True, key=f"tbl-{idx}-{col}")
+
+    # 3-2) 단문 응답 키워드 분석
+    with sub_tabs[1]:
+        st.subheader("단문 응답 키워드 분석 (Q9-DS-4)")
+        page_short_keyword(df)
+
+    # 3-3) 장문 서술형 분석
+    with sub_tabs[2]:
+        st.subheader("장문 서술형 분석 (Q9-DS-5)")
+        # Q9-DS-5 컬럼 필터
+        long_cols = [c for c in df.columns if "Q9-DS-5" in c]
+        if not long_cols:
+            st.warning("Q9-DS-5 관련 문항을 찾을 수 없습니다.")
+        else:
+            answers = df[long_cols[0]].dropna().astype(str).tolist()
+            df_long = process_answers(answers)
+            show_short_answer_keyword_analysis(df_long)
+
+# 4) 기존 단문 응답 키워드 분석 (메인 탭)
+with main_tabs[3]:
     page_short_keyword(df)
 
