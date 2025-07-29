@@ -135,6 +135,7 @@ def plot_sq4_custom_bar(df, question):
         header=dict(values=[""] + list(table_df.columns)),
         cells=dict(values=[table_df.index] + [table_df[c].tolist() for c in table_df.columns])
     ))
+    return fig, table_fig 
 
 # ─────────────────────────────────────────────────────
 # 일반 범주형 누적 Bar + Table SQ5/SQ3/SQ4
@@ -182,13 +183,14 @@ def plot_categorical_stacked_bar(df, question):
         '비율 (%)': [percent[c] for c in categories_raw]
     }, index=categories).T
 
+    # 역순으로 컬럼 뒤집기
     table_df = table_df[table_df.columns[::-1]]
 
     table_fig = go.Figure(go.Table(
         header=dict(values=[""] + list(table_df.columns), align='center'),
         cells=dict(values=[table_df.index] + [table_df[col].tolist() for col in table_df.columns], align='center')
     ))
-
+    return fig, table_fig 
 
 # ─────────────────────────────────────────────────────
 # Q1~Q9-D: 7점 척도 스택형 바 + Table
