@@ -109,6 +109,9 @@ def plot_sq4_custom_bar(df, question):
     labels = [wrap_label(remove_parentheses(x),10) for x in cats]
     colors = px.colors.qualitative.Plotly
 
+    wrapped_labels = [wrap_label(remove_parentheses(label), width=10) for label in categories]
+
+
     fig = go.Figure()
     for i, cat in enumerate(cats):
         fig.add_trace(go.Bar(
