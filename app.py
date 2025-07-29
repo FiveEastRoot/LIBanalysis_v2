@@ -373,7 +373,7 @@ def show_short_answer_keyword_analysis(df_result):
 #-----------------------------------------------------------------------------
 #페이지 구분
 def page_home(df):
-    st.subheader("👤 인구통계 문항 (SQ1 ~ 6 / BQ1 ~ 2)")
+    st.subheader("👤 인구통계 문항 (SQ1 ~ 5 / BQ1 ~ 2)")
     soc_qs = [c for c in df.columns if c.startswith("SQ") or c.startswith("BQ")]
     for q in soc_qs:
         try:
