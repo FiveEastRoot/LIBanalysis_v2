@@ -131,8 +131,8 @@ def plot_sq4_custom_bar(df, question):
     }, index=labels).T
     
     table_fig = go.Figure(go.Table(
-        header=dict(values=[""] + list(table_df.columns)),
-        cells=dict(values=[table_df.index] + [table_df[c].tolist() for c in table_df.columns])
+        header=dict(values=[""] + list(table_df.columns), align='center'),
+        cells=dict(values=[table_df.index] + [table_df[col].tolist() for col in table_df.columns], align='center')
     ))
     table_fig.update_layout(height=120, margin=dict(t=10, b=5))
     return fig, table_fig 
