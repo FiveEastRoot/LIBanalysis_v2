@@ -170,7 +170,7 @@ def plot_categorical_stacked_bar(df, question):
         ),
         title=dict(text=question, font=dict(size=16)),
         yaxis=dict(showticklabels=False),
-        height=100, margin=dict(t=40, b=100)
+        height=250, margin=dict(t=40, b=100)
     )
 
     table_df = pd.DataFrame({
