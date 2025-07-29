@@ -121,7 +121,7 @@ def plot_sq4_custom_bar(df, question):
         barmode='stack', showlegend=True,
         legend=dict(orientation='h', y=-1, x=0.5, xanchor='center', traceorder='reversed'),
         title=question, yaxis=dict(showticklabels=False),
-        height=250, margin=dict(t=40,b=80)
+        height=250, margin=dict(t=40,b=100)
     )
 
     table_df = pd.DataFrame({'응답 수':[counts[c] for c in cats],'비율 (%)':[percent[c] for c in cats]}, index=labels).T
@@ -129,7 +129,7 @@ def plot_sq4_custom_bar(df, question):
         header=dict(values=[""]+list(table_df.columns)),
         cells=dict(values=[table_df.index]+[table_df[c].tolist() for c in table_df.columns])
     ))
-    table_fig.update_layout(height=80, margin=dict(t=10,b=5))
+    table_fig.update_layout(height=120, margin=dict(t=10,b=5))
     return fig, table_fig
 
 # ─────────────────────────────────────────────────────
