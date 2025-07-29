@@ -474,20 +474,19 @@ with tabs[0]:
 with tabs[1]:
     page_basic_vis(df)
 
-# 3) 자치구 구성 문항 (Q9‑D- 포함 컬럼 전부)
+# 3) 자치구 구성 문항 (Q9‑D 포함 컬럼 전부)
 with tabs[2]:
     st.subheader("🗺️ 자치구 구성 문항 (7점 척도)")
-
-    # 컬럼명에 "Q9-D"를 포함하는 모든 컬럼 선택
     subregion_cols = [c for c in df.columns if "Q9-D-" in c]
     if not subregion_cols:
-        st.error("Q9‑D 로 시작하거나 포함하는 문항을 찾을 수 없습니다.")
+        st.error("Q9‑D- 로 시작하거나 포함하는 문항을 찾을 수 없습니다.")
     else:
-        for q in subregion_cols:
+        for idx, q in enumerate(subregion_cols):
             bar, tbl = plot_stacked_bar_with_table(df, q)
             st.markdown(f"##### {q}")
-            st.plotly_chart(bar, use_container_width=True)
-            st.plotly_chart(tbl, use_container_width=True)
+            # key에 인덱스나 문항명을 포함해서 중복 방지
+            st.plotly_chart(bar, use_container_width=True, key=f"bar-{idx}-{q}")
+            st.plotly_chart(tbl, use_container_width=True, key=f"tbl-{idx}-{q}")
 
 # 4) 단문 응답 키워드 분석
 with tabs[3]:
