@@ -41,7 +41,7 @@ def plot_age_histogram_with_labels(df, question):
     ))
     fig.update_layout(
         title=question, yaxis_title="응답 수",
-        bargap=0.2, height=300, margin=dict(t=50, b=10)
+        bargap=0.2, height=450, margin=dict(t=40, b=10)
     )
 
     # Table
