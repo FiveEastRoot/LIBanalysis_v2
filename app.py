@@ -538,7 +538,7 @@ def plot_dq3(df):
     tbl_df = pd.DataFrame({"응답 수":counts, "비율 (%)":pct}).T
     tbl = go.Figure(go.Table(header=dict(values=[""]+list(tbl_df.columns)),
                                cells=dict(values=[tbl_df.index]+[tbl_df[c].tolist() for c in tbl_df.columns])))
-    tbl.update_layout(height=250, margin=dict(t=10,b=5))
+    tbl.update_layout(height=350, margin=dict(t=10,b=5))
     return fig, tbl, question
 
 
