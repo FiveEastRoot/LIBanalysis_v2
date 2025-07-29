@@ -492,7 +492,6 @@ with main_tabs[2]:
         else:
             for idx, col in enumerate(subregion_cols):
                 bar, tbl = plot_stacked_bar_with_table(df, col)
-                st.markdown(f"##### {col}")
                 st.plotly_chart(bar, use_container_width=True, key=f"bar-{idx}-{col}")
                 st.plotly_chart(tbl, use_container_width=True, key=f"tbl-{idx}-{col}")
 
