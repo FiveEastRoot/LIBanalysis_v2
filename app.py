@@ -83,7 +83,7 @@ def plot_bq2_bar(df, question):
     fig.update_layout(
         title=dict(text=question, font=dict(size=16)),
         yaxis=dict(title="응답 수", range=[0, y_max]),
-        height=250,
+        height=450,
         margin=dict(t=50, b=100),
         xaxis_tickangle=-30
     )
@@ -133,7 +133,7 @@ def plot_sq4_custom_bar(df, question):
     return fig, table_fig
 
 # ─────────────────────────────────────────────────────
-# 일반 범주형 누적 Bar + Table SQ5
+# 일반 범주형 누적 Bar + Table SQ5/SQ3/SQ4
 # ─────────────────────────────────────────────────────
 def plot_categorical_stacked_bar(df, question):
     data = df[question].dropna().astype(str)
