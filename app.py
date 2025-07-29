@@ -481,7 +481,7 @@ def plot_dq1(df):
     fig = go.Figure(go.Bar(x=grp.index, y=grp.values, text=grp.values,
                             textposition='outside', marker_color="#1f77b4"))
     fig.update_layout(title=question, xaxis_title="이용 빈도 구간", yaxis_title="응답 수",
-                      bargap=0.2, height=400, margin=dict(t=50,b=50), xaxis_tickangle=-15)
+                      bargap=0.2, height=450, margin=dict(t=30,b=50), xaxis_tickangle=-15)
     # 테이블
     tbl_df = pd.DataFrame({"응답 수":grp, "비율 (%)":pct}).T
     tbl = go.Figure(go.Table(header=dict(values=[""]+list(tbl_df.columns)),
@@ -514,7 +514,7 @@ def plot_dq2(df):
     fig = go.Figure(go.Bar(x=labels, y=grp.values, text=grp.values,
                             textposition='outside', marker_color="#1f77b4"))
     fig.update_layout(title=question, xaxis_title="이용 기간 (년)", yaxis_title="응답 수",
-                      bargap=0.2, height=400, margin=dict(t=50,b=50), xaxis_tickangle=-15)
+                      bargap=0.2, height=450, margin=dict(t=30,b=50), xaxis_tickangle=-15)
     tbl_df = pd.DataFrame({"응답 수":grp, "비율 (%)":pct}).T
     tbl = go.Figure(go.Table(header=dict(values=[""]+labels),
                                cells=dict(values=[tbl_df.index]+[tbl_df[c].tolist() for c in tbl_df.columns])))
