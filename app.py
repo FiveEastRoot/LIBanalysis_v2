@@ -449,150 +449,97 @@ def page_short_keyword(df):
 
 
 # ─────────────────────────────────────────────────────
-# DQ1: 도서관 월평균 이용횟수 (연 기준 환산 + 사용자 구간)
+# DQ1: 세로 막대 + Table (자동 탐색)
 # ─────────────────────────────────────────────────────
-def plot_dq1(df, question="DQ1. 2024년 기준 도서관을 월 평균 몇 회 이용하셨습니까?"):
-    # 숫자만 뽑아서 월별 값으로 변환
-    data = df[question].dropna().astype(str).str.extract(r'(\d+\.?\d*)')
-    data.columns = ['monthly']
-    data['monthly'] = pd.to_numeric(data['monthly'], errors='coerce')
-    # 연 기준 환산
-    data['yearly'] = data['monthly'] * 12
-
-    # 사용자 구간 함수
-    def categorize_usage(freq):
+def plot_dq1(df):
+    cols = [c for c in df.columns if c.startswith("DQ1")]
+    if not cols:
+        return None, None, ""
+    question = cols[0]
+    # 숫자 추출 및 연 환산
+    data = df[question].dropna().astype(str).str.extract(r"(\d+\.?\d*)")[0]
+    monthly = pd.to_numeric(data, errors='coerce')
+    yearly = monthly * 12
+    # 구간화 함수
+    def categorize(f):
         try:
-            f = float(freq)
+            f = float(f)
         except:
             return None
-        if f < 12:            return "0~11회: 연 1회 미만"
-        elif f < 24:          return "12~23회: 월 1회 정도"
-        elif f < 48:          return "24~47회: 월 2~4회 정도"
-        elif f < 72:          return "48~71회: 주 1회 정도"
-        elif f < 144:         return "72~143회: 주 2~3회"
-        else:                 return "144회 이상: 거의 매일"
+        if f < 12: return "0~11회: 연 1회 미만"
+        elif f < 24: return "12~23회: 월 1회 정도"
+        elif f < 48: return "24~47회: 월 2~4회 정도"
+        elif f < 72: return "48~71회: 주 1회 정도"
+        elif f < 144: return "72~143회: 주 2~3회"
+        else: return "144회 이상: 거의 매일"
+    cat = yearly.apply(categorize)
+    order = ["0~11회: 연 1회 미만","12~23회: 월 1회 정도","24~47회: 월 2~4회 정도",
+             "48~71회: 주 1회 정도","72~143회: 주 2~3회","144회 이상: 거의 매일"]
+    grp = cat.value_counts().reindex(order, fill_value=0)
+    pct = (grp/grp.sum()*100).round(1)
+    # 그래프
+    fig = go.Figure(go.Bar(x=grp.index, y=grp.values, text=grp.values,
+                            textposition='outside', marker_color="#1f77b4"))
+    fig.update_layout(title=question, xaxis_title="이용 빈도 구간", yaxis_title="응답 수",
+                      bargap=0.2, height=400, margin=dict(t=50,b=100), xaxis_tickangle=-15)
+    # 테이블
+    tbl_df = pd.DataFrame({"응답 수":grp, "비율 (%)":pct}).T
+    tbl = go.Figure(go.Table(header=dict(values=[""]+list(tbl_df.columns)),
+                               cells=dict(values=[tbl_df.index]+[tbl_df[c].tolist() for c in tbl_df.columns])))
+    tbl.update_layout(height=250, margin=dict(t=10,b=5))
+    return fig, tbl, question
 
-    data['category'] = data['yearly'].apply(categorize_usage)
-    order = [
-        "0~11회: 연 1회 미만",
-        "12~23회: 월 1회 정도",
-        "24~47회: 월 2~4회 정도",
-        "48~71회: 주 1회 정도",
-        "72~143회: 주 2~3회",
-        "144회 이상: 거의 매일"
-    ]
-    grouped = data['category']\
-        .value_counts()\
-        .reindex(order, fill_value=0)
-
-    percent = (grouped / grouped.sum() * 100).round(1)
-
-    # ─── 막대그래프
-    fig = go.Figure(go.Bar(
-        x=grouped.index,
-        y=grouped.values,
-        text=grouped.values,
-        textposition='outside',
-        marker_color="#1f77b4"
-    ))
-    fig.update_layout(
-        title=f"{question} (연 기준 환산 + 사용자 구간)",
-        xaxis_title="이용 빈도 구간",
-        yaxis_title="응답 수",
-        bargap=0.2,
-        height=400,
-        margin=dict(t=50, b=100),
-        xaxis_tickangle=-15
-    )
-
-    # ─── 테이블
-    table_df = pd.DataFrame({
-        "응답 수": grouped,
-        "비율 (%)": percent
-    }).T
-    table_fig = go.Figure(go.Table(
-        header=dict(
-            values=[""] + list(table_df.columns),
-            align='center', height=30, font=dict(size=11)
-        ),
-        cells=dict(
-            values=[table_df.index] + [table_df[c].tolist() for c in table_df.columns],
-            align='center', height=30, font=dict(size=11)
-        )
-    ))
-    table_fig.update_layout(height=250, margin=dict(t=10, b=5))
-
-    return fig, table_fig
 # ─────────────────────────────────────────────────────
-# DQ2: 도서관 이용기간 (년 단위 올림)
+# DQ2: 이용기간 (년 단위 올림) 자동 탐색
 # ─────────────────────────────────────────────────────
-def plot_dq2(df,
-             question="DQ2. 그동안 이용하신 모든 도서관 기준으로, 도서관 이용 기간은 어느 정도 되십니까?"):
-    import re
-
-    # 1) 텍스트 파싱 함수
-    def parse_duration(s):
+def plot_dq2(df):
+    cols = [c for c in df.columns if c.startswith("DQ2")]
+    if not cols:
+        return None, None, ""
+    question = cols[0]
+    # 파싱
+    def parse(s):
         s = str(s).strip()
-        # '2년 3개월' → 3년
         m = re.match(r'^(\d+)\s*년\s*(\d+)\s*개월$', s)
-        if m:
-            y, mth = int(m.group(1)), int(m.group(2))
-            return y + (1 if mth > 0 else 0)
-        # '2년'
-        m = re.match(r'^(\d+)\s*년$', s)
-        if m:
-            return int(m.group(1))
-        # '6개월'
+        if m: return int(m.group(1)) + (1 if int(m.group(2))>0 else 0)
+        m = re.match(r'^(\d+)\s*년$', s);
+        if m: return int(m.group(1))
         m = re.match(r'^(\d+)\s*개월$', s)
-        if m:
-            return 1
+        if m: return 1
         return None
+    yrs = df[question].dropna().apply(parse)
+    grp = yrs.value_counts().sort_index()
+    pct = (grp/grp.sum()*100).round(1)
+    labels = [f"{y}년" for y in grp.index]
+    fig = go.Figure(go.Bar(x=labels, y=grp.values, text=grp.values,
+                            textposition='outside', marker_color="#1f77b4"))
+    fig.update_layout(title=question, xaxis_title="이용 기간 (년)", yaxis_title="응답 수",
+                      bargap=0.2, height=400, margin=dict(t=50,b=100), xaxis_tickangle=-15)
+    tbl_df = pd.DataFrame({"응답 수":grp, "비율 (%)":pct}).T
+    tbl = go.Figure(go.Table(header=dict(values=[""]+labels),
+                               cells=dict(values=[tbl_df.index]+[tbl_df[c].tolist() for c in tbl_df.columns])))
+    tbl.update_layout(height=250, margin=dict(t=10,b=5))
+    return fig, tbl, question
 
-    # 2) 연 단위로 변환
-    durations = (
-        df[question]
-        .dropna()
-        .astype(str)
-        .apply(parse_duration)
-    )
-    grouped = durations.value_counts().sort_index()
-    percent = (grouped / grouped.sum() * 100).round(1)
-
-    # 3) 막대그래프
-    labels = [f"{y}년" for y in grouped.index]
-    fig = go.Figure(go.Bar(
-        x=labels, y=grouped.values,
-        text=grouped.values, textposition='outside',
-        marker_color="#1f77b4"
-    ))
-    fig.update_layout(
-        title=f"{question} (년 단위 올림)",
-        xaxis_title="이용 기간 (년)",
-        yaxis_title="응답 수",
-        bargap=0.2, height=400,
-        margin=dict(t=50, b=100),
-        xaxis_tickangle=-15
-    )
-
-    # 4) 응답표 (Table)
-    table_df = pd.DataFrame({
-        "응답 수": grouped,
-        "비율 (%)": percent
-    }).T
-    table_fig = go.Figure(go.Table(
-        header=dict(
-            values=[""] + labels,
-            fill_color="#f0f0f0",
-            align='center', font=dict(size=11), height=30
-        ),
-        cells=dict(
-            values=[table_df.index] + [table_df[col].tolist() for col in table_df.columns],
-            align='center', font=dict(size=10), height=28
-        )
-    ))
-    table_fig.update_layout(height=250, margin=dict(t=10, b=5))
-
-    return fig, table_fig
+# ─────────────────────────────────────────────────────
+# DQ3: 기존 자동 탐색
+# ─────────────────────────────────────────────────────
+def plot_dq3(df):
+    cols = [c for c in df.columns if c.startswith("DQ3")]
+    if not cols:
+        return None, None, ""
+    question = cols[0]
+    counts = df[question].dropna().astype(str).value_counts().sort_index()
+    pct = (counts/counts.sum()*100).round(1)
+    fig = go.Figure(go.Bar(x=counts.index, y=counts.values, text=counts.values,
+                            textposition='outside', marker_color="#1f77b4"))
+    fig.update_layout(title=question, xaxis_title="응답", yaxis_title="응답 수",
+                      bargap=0.2, height=400, margin=dict(t=50,b=100), xaxis_tickangle=-15)
+    tbl_df = pd.DataFrame({"응답 수":counts, "비율 (%)":pct}).T
+    tbl = go.Figure(go.Table(header=dict(values=[""]+list(tbl_df.columns)),
+                               cells=dict(values=[tbl_df.index]+[tbl_df[c].tolist() for c in tbl_df.columns])))
+    tbl.update_layout(height=250, margin=dict(t=10,b=5))
+    return fig, tbl, question
 
 
 # ─────────────────────────────────────────────────────
@@ -680,4 +627,13 @@ with main_tabs[3]:
     st.plotly_chart(fig2, use_container_width=True)
     st.plotly_chart(tbl2, use_container_width=True)
 
-    # (원하시면 DQ3도 동일 패턴으로 plot_dq3 구현 후 추가)
+      # DQ3 (자동 탐색)
+    st.subheader("DQ3 분석")
+    fig3, tbl3, q3 = plot_dq3(df)
+    if fig3 is None:
+        st.warning("DQ3 문항이 없습니다.")
+    else:
+        st.subheader(q3)
+        st.plotly_chart(fig3, use_container_width=True)
+        st.plotly_chart(tbl3, use_container_width=True)
+
