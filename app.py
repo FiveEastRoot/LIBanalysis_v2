@@ -119,9 +119,9 @@ def plot_sq4_custom_bar(df, question):
         ))
     fig.update_layout(
         barmode='stack', showlegend=True,
-        legend=dict(orientation='h', y=-1, x=0.5, xanchor='center', traceorder='reversed'),
+        legend=dict(orientation='h', y=-0.95, x=0.5, xanchor='center', traceorder='reversed'),
         title=question, yaxis=dict(showticklabels=False),
-        height=250, margin=dict(t=40,b=80)
+        height=250, margin=dict(t=40,b=100)
     )
 
     table_df = pd.DataFrame({'응답 수':[counts[c] for c in cats],'비율 (%)':[percent[c] for c in cats]}, index=labels).T
