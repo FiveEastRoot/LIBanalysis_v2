@@ -164,7 +164,7 @@ def plot_categorical_stacked_bar(df, question):
         showlegend=True,
         legend=dict(
             orientation='h',
-            yanchor='bottom', y=-2,
+            yanchor='bottom', y=-1.8,
             xanchor='center', x=0.5,
             traceorder='reversed'
         ),
