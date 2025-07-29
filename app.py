@@ -109,9 +109,6 @@ def plot_sq4_custom_bar(df, question):
     labels = [wrap_label(remove_parentheses(x),10) for x in cats]
     colors = px.colors.qualitative.Plotly
 
-    wrapped_labels = [wrap_label(remove_parentheses(labelS), width=10) for label in categories]
-
-
     fig = go.Figure()
     for i, cat in enumerate(cats):
         fig.add_trace(go.Bar(
@@ -131,11 +128,11 @@ def plot_sq4_custom_bar(df, question):
     table_df = pd.DataFrame({
         '응답 수': [counts[c] for c in cats],
         '비율 (%)': [percent[c] for c in cats]
-    }, index=wrapped_labels).T
+    }, index=labels).T
     
     table_fig = go.Figure(go.Table(
-        header=dict(values=[""] + list(table_df.columns), align='center', height=36, font=dict(size=11)),
-        cells=dict(values=[table_df.index] + [table_df[col].tolist() for col in table_df.columns], align='center', height=36, font=dict(size=11))
+        header=dict(values=[""] + list(table_df.columns), align='center'),
+        cells=dict(values=[table_df.index] + [table_df[col].tolist() for col in table_df.columns], align='center')
     ))
     table_fig.update_layout(height=120, margin=dict(t=10, b=5))
     return fig, table_fig 
