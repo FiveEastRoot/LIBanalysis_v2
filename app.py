@@ -15,6 +15,7 @@ def remove_parentheses(text):
     return re.sub(r'\(.*?\)', '', text).strip()
 def wrap_label(label, width=10):
     return '<br>'.join([label[i:i+width] for i in range(0, len(label), width)])
+
 # ─────────────────────────────────────────────────────
 # SQ2: 연령 히스토그램 + Table
 # ─────────────────────────────────────────────────────
@@ -66,7 +67,7 @@ def plot_bq2_bar(df, question):
     counts = counts_raw.values
     percent = percent_raw.values
 
-    # ✅ 자동 줄바꿈 적용
+    # 자동 줄바꿈 적용
     wrapped_labels = [wrap_label(remove_parentheses(label), width=10) for label in categories]
 
     colors = px.colors.qualitative.Plotly
@@ -87,12 +88,8 @@ def plot_bq2_bar(df, question):
         xaxis_tickangle=-30
     )
 
-    # ✅ 자동 줄바꿈된 레이블을 표에 사용
-    table_df = pd.DataFrame({
-        '응답 수': counts,
-        '비율 (%)': percent
-    }, index=wrapped_labels).T
-
+    # 자동 줄바꿈된 레이블을 표에 사용
+    table_df = pd.DataFrame({'응답 수': counts, '비율 (%)': percent}, index=wrapped_labels).T
     table_fig = go.Figure(go.Table(
         header=dict(values=[""] + list(table_df.columns), align='center', height=36, font=dict(size=11)),
         cells=dict(values=[table_df.index] + [table_df[col].tolist() for col in table_df.columns], align='center', height=36, font=dict(size=11))
@@ -167,16 +164,13 @@ def plot_categorical_stacked_bar(df, question):
         showlegend=True,
         legend=dict(
             orientation='h',
-            yanchor='bottom',
-            y=-0.6,
-            xanchor='center',
-            x=0.5,
+            yanchor='bottom', y=-0.6,
+            xanchor='center', x=0.5,
             traceorder='reversed'
         ),
         title=dict(text=question, font=dict(size=16)),
         yaxis=dict(showticklabels=False),
-        height=250,
-        margin=dict(t=40, b=100)
+        height=250, margin=dict(t=40, b=100)
     )
 
     table_df = pd.DataFrame({
@@ -189,7 +183,6 @@ def plot_categorical_stacked_bar(df, question):
     ))
     table_fig.update_layout(height=120, margin=dict(t=10, b=5))
     return fig, table_fig
-
 
 # ─────────────────────────────────────────────────────
 # Q1~Q9-D: 7점 척도 스택형 바 + Table
@@ -204,36 +197,27 @@ def plot_stacked_bar_with_table(df, question):
         1: "#d73027", 2: "#fc8d59", 3: "#fee090",
         4: "#dddddd", 5: "#91bfdb", 6: "#4575b4", 7: "#313695"
     }
-    # Bar
     fig = go.Figure()
     for v in order:
         fig.add_trace(go.Bar(
-            x=[percent[v]], y=[question],
-            orientation='h',
-            name=f"{v}점",
-            marker_color=colors[v],
-            text=f"{percent[v]}%", textposition='inside'
+            x=[percent[v]], y=[question], orientation='h', name=f"{v}점",
+            marker_color=colors[v], text=f"{percent[v]}%", textposition='inside'
         ))
     fig.update_layout(
         barmode='stack', showlegend=False,
-        title=question,
-        xaxis_title="매우 불만족 → 매우 만족",
-        yaxis=dict(showticklabels=False),
-        height=180, margin=dict(t=40,b=2)
+        title=question, xaxis_title="매우 불만족 → 매우 만족",
+        yaxis=dict(showticklabels=False), height=180, margin=dict(t=40,b=2)
     )
 
-    # Table
     table_df = pd.DataFrame({
         '응답 수': [int(counts[v]) for v in order],
         '비율 (%)': [percent[v] for v in order]
     }, index=[f"{v}점" for v in order]).T
-
     table_fig = go.Figure(go.Table(
         header=dict(values=[""] + list(table_df.columns), align='center'),
         cells=dict(values=[table_df.index] + [table_df[c].tolist() for c in table_df.columns], align='center')
     ))
     table_fig.update_layout(height=80, margin=dict(t=10,b=0))
-
     return fig, table_fig
 
 
@@ -461,8 +445,6 @@ def page_short_keyword(df):
 # ─────────────────────────────────────────────────────
 # ▶️ Streamlit 실행
 # ─────────────────────────────────────────────────────
-# ▼ 기존 Streamlit 실행부 아래를 이렇게 수정하세요 ▼
-
 st.set_page_config(
     page_title="서울시 공공도서관 설문 시각화 대시보드",
     layout="wide"
@@ -476,21 +458,36 @@ if not uploaded:
 df = pd.read_excel(uploaded)
 st.success("✅ 업로드 완료")
 
-# ✅ 상단 탭으로 대체
-tabs = st.tabs(["👤 응답자 정보", "📈 만족도 기본 시각화", "📘 단문 응답 키워드 분석"])
+# 상단 탭: 응답자정보, 만족도, 자치구 구성, 단문 키워드
+tabs = st.tabs([
+    "👤 응답자 정보",
+    "📈 만족도 기본 시각화",
+    "🗺️ 자치구 구성 문항",
+    "📘 단문 응답 키워드 분석"
+])
 
+# 1) 인구통계 & BQ1~2
 with tabs[0]:
     page_home(df)
 
+# 2) Q1~Q8 기본 시각화
 with tabs[1]:
     page_basic_vis(df)
 
+# 3) 자치구 구성 문항 (Q9-D-1 ~ Q9-D-3)
 with tabs[2]:
-    with st.spinner("🔍 GPT 기반 키워드 분석 중..."):
-        target_cols = [col for col in df.columns if "Q9-DS-4" in col]
-        if not target_cols:
-            st.warning("Q9-DS-4 관련 문항을 찾을 수 없습니다.")
+    st.subheader("🗺️ 자치구 구성 문항 (7점 척도)")
+    subregion_qs = [f"Q9-D-{i}" for i in range(1, 4)]
+    for q in subregion_qs:
+        if q in df.columns:
+            bar, tbl = plot_stacked_bar_with_table(df, q)
+            st.markdown(f"##### {q}")
+            st.plotly_chart(bar, use_container_width=True)
+            st.plotly_chart(tbl, use_container_width=True)
         else:
-            answers = df[target_cols[0]].dropna().astype(str).tolist()
-            df_result = process_answers(answers)
-            show_short_answer_keyword_analysis(df_result)
+            st.warning(f"{q} 문항을 찾을 수 없습니다.")
+
+# 4) 단문 응답 키워드 분석
+with tabs[3]:
+    page_short_keyword(df)
+
