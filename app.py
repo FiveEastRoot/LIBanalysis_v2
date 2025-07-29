@@ -462,7 +462,6 @@ main_tabs = st.tabs([
     "👤 응답자 정보",
     "📈 만족도 기본 시각화",
     "🗺️ 자치구 구성 문항",
-    "📘 단문 응답 키워드 분석"
 ])
 
 # 1) 응답자 정보
@@ -510,8 +509,3 @@ with main_tabs[2]:
             answers = df[long_cols[0]].dropna().astype(str).tolist()
             df_long = process_answers(answers)
             show_short_answer_keyword_analysis(df_long)
-
-# 4) 기존 단문 응답 키워드 분석 (메인 탭)
-with main_tabs[3]:
-    page_short_keyword(df)
-
