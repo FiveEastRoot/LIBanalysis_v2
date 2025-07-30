@@ -635,9 +635,6 @@ def plot_dq5(df):
 # ─────────────────────────────────────────────────────
 # DQ7-E: 다이버징 스택형 바 차트 (Likert) 함수 정의
 # ─────────────────────────────────────────────────────
-# ─────────────────────────────────────────────────────
-# DQ7-E: 다이버징 스택형 바 차트 (Likert) 함수 정의
-# ─────────────────────────────────────────────────────
 def plot_likert_diverging(df, prefix="DQ7-E"):
     # 해당 prefix로 시작하는 문항들 탐색
     cols = [c for c in df.columns if c.startswith(prefix)]
@@ -653,10 +650,12 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
     # 명시적 컬럼 순서 보장
     likert_df = likert_df.reindex(columns=range(1,8))
 
-    # 다이버징 스택 바
+        # 다이버징 스택 바
     fig = go.Figure()
-    # 부정(1-3)
-    for score, color in zip([1,2,3],["#d73027","#fc8d59","#fee090"]):
+    # 부정(1-3): 스택 순서 변경하여 1점이 가장 왼쪽(외곽)에 위치하도록
+    neg_scores = [3,2,1]
+    neg_colors = ["#fee090","#fc8d59","#d73027"]  # 3점→2점→1점 순서
+    for score, color in zip(neg_scores, neg_colors):
         fig.add_trace(go.Bar(
             y=likert_df.index,
             x=-likert_df[score],
@@ -684,6 +683,10 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
     fig.update_layout(
         barmode='relative',
         title="DQ7-E 도서관 이미지 분포 (다이버징 바)",
+        legend=dict(traceorder='normal')
+    )
+        barmode='relative',
+        title="DQ7-E 도서관 이미지 분포 (다이버징 바)",
         xaxis_tickformat='%',
         legend=dict(traceorder='normal')
     )
@@ -701,7 +704,6 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
         )
     ))
     return fig, table_fig
-
 
 
 # ─────────────────────────────────────────────────────
