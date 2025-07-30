@@ -635,6 +635,9 @@ def plot_dq5(df):
 # ─────────────────────────────────────────────────────
 # DQ7-E: 다이버징 스택형 바 차트 (Likert) 함수 정의
 # ─────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────
+# DQ7-E: 다이버징 스택형 바 차트 (Likert) 함수 정의
+# ─────────────────────────────────────────────────────
 def plot_likert_diverging(df, prefix="DQ7-E"):
     # 해당 prefix로 시작하는 문항들 탐색
     cols = [c for c in df.columns if c.startswith(prefix)]
@@ -647,29 +650,58 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
         pct = (counts / counts.sum() * 100).round(1)
         dist[col] = pct
     likert_df = pd.DataFrame(dist).T  # index: 문항, columns: 1~7
+    # 명시적 컬럼 순서 보장
+    likert_df = likert_df.reindex(columns=range(1,8))
+
     # 다이버징 스택 바
     fig = go.Figure()
     # 부정(1-3)
     for score, color in zip([1,2,3],["#d73027","#fc8d59","#fee090"]):
-        fig.add_trace(go.Bar(y=likert_df.index,
-                             x=-likert_df[score],
-                             name=f"{score}점", orientation='h', marker_color=color))
+        fig.add_trace(go.Bar(
+            y=likert_df.index,
+            x=-likert_df[score],
+            name=f"{score}점",
+            orientation='h',
+            marker_color=color
+        ))
     # 중립(4)
-    fig.add_trace(go.Bar(y=likert_df.index,
-                         x=likert_df[4], name="4점", orientation='h', marker_color="#dddddd"))
+    fig.add_trace(go.Bar(
+        y=likert_df.index,
+        x=likert_df[4],
+        name="4점",
+        orientation='h',
+        marker_color="#dddddd"
+    ))
     # 긍정(5-7)
     for score, color in zip([5,6,7],["#91bfdb","#4575b4","#313695"]):
-        fig.add_trace(go.Bar(y=likert_df.index,
-                             x=likert_df[score], name=f"{score}점", orientation='h', marker_color=color))
-    fig.update_layout(barmode='relative', title="DQ7-E 도서관 이미지 분포 (다이버징 바)",
-                      xaxis_tickformat='%')
-    # 테이블
+        fig.add_trace(go.Bar(
+            y=likert_df.index,
+            x=likert_df[score],
+            name=f"{score}점",
+            orientation='h',
+            marker_color=color
+        ))
+    fig.update_layout(
+        barmode='relative',
+        title="DQ7-E 도서관 이미지 분포 (다이버징 바)",
+        xaxis_tickformat='%',
+        legend=dict(traceorder='normal')
+    )
+    # 테이블: 명시적 컬럼 순서
     table_df = likert_df.copy()
+    table_df = table_df.reindex(columns=range(1,8))
     table_fig = go.Figure(go.Table(
-        header=dict(values=["문항"]+list(table_df.columns), align='center'),
-        cells=dict(values=[table_df.index]+[table_df[c].tolist() for c in table_df.columns], align='center')
+        header=dict(
+            values=["문항"] + [f"{c}점" for c in table_df.columns],
+            align='center'
+        ),
+        cells=dict(
+            values=[table_df.index] + [table_df[c].tolist() for c in table_df.columns],
+            align='center'
+        )
     ))
     return fig, table_fig
+
 
 
 # ─────────────────────────────────────────────────────
