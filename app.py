@@ -566,8 +566,9 @@ def plot_dq3(df):
 
     return fig, table_fig, question
 
+
 # ─────────────────────────────────────────────────────
-# DQ4: 누적 세로 Bar 그래프 + Table (번호 prefix 제거)
+# DQ4: 누적 세로 Bar 그래프 + Table (1순위 기준 내림차순 정렬)
 # ─────────────────────────────────────────────────────
 def plot_dq4_bar(df):
     cols = [c for c in df.columns if c.startswith("DQ4")]
@@ -578,49 +579,62 @@ def plot_dq4_bar(df):
 
     s1 = df[col1].dropna().astype(str)
     s2 = df[col2].dropna().astype(str)
-    categories_raw = sorted(set(s1.unique()).union(s2.unique()))
-    display_labels = [label.split('. ', 1)[-1] if '. ' in label else label for label in categories_raw]
+    # 원본 카테고리 집합
+    cats = sorted(set(s1.unique()).union(s2.unique()))
+    # prefix 제거용 라벨
+    labels = [c.split('. ', 1)[-1] if '. ' in c else c for c in cats]
 
-    counts1 = s1.value_counts().reindex(categories_raw, fill_value=0)
-    counts2 = s2.value_counts().reindex(categories_raw, fill_value=0)
-    # percent calculations preserved for table
+    # 응답 수 계산
+    counts1 = s1.value_counts().reindex(cats, fill_value=0)
+    counts2 = s2.value_counts().reindex(cats, fill_value=0)
     pct1 = (counts1 / counts1.sum() * 100).round(1)
     pct2 = (counts2 / counts2.sum() * 100).round(1)
+
+    # 1순위 기준 내림차순으로 순서 정렬
+    order_idx = counts1.sort_values(ascending=False).index.tolist()
+    # 정렬된 display labels
+    sorted_labels = [lbl.split('. ',1)[-1] if '. ' in lbl else lbl for lbl in order_idx]
+    # 정렬된 counts
+    sorted_counts1 = counts1.reindex(order_idx)
+    sorted_counts2 = counts2.reindex(order_idx)
+    # 테이블용 percent 재정렬
+    sorted_pct1 = pct1.reindex(order_idx)
+    sorted_pct2 = pct2.reindex(order_idx)
 
     # 누적 세로 Bar그래프 생성 (응답자 수)
     fig = go.Figure()
     fig.add_trace(go.Bar(
-        x=display_labels, y=counts1,
-        name='1순위', marker_color='blue', text=counts1, textposition='outside'
+        x=sorted_labels, y=sorted_counts1.values,
+        name='1순위', marker_color='blue', text=sorted_counts1.values, textposition='outside'
     ))
     fig.add_trace(go.Bar(
-        x=display_labels, y=counts2,
-        name='2순위', marker_color='green', text=counts2, textposition='outside'
+        x=sorted_labels, y=sorted_counts2.values,
+        name='2순위', marker_color='green', text=sorted_counts2.values, textposition='outside'
     ))
     fig.update_layout(
         barmode='stack',
         title="DQ4. 도서관 이용 주요 목적 1순위 vs 2순위",
         xaxis_title="이용 목적",
         yaxis_title="응답자 수",
-        height=600,
+        height=400,
         margin=dict(t=60, b=100),
-        xaxis_tickangle=-20
+        xaxis_tickangle=-15
     )
 
     # 하단 테이블 생성 (응답 수 + 비율)
     table_df = pd.DataFrame({
-        '1순위 응답 수': counts1.values,
-        '1순위 비율(%)': pct1.values,
-        '2순위 응답 수': counts2.values,
-        '2순위 비율(%)': pct2.values
-    }, index=display_labels).T
+        '1순위 응답 수': sorted_counts1.values,
+        '1순위 비율(%)': sorted_pct1.values,
+        '2순위 응답 수': sorted_counts2.values,
+        '2순위 비율(%)': sorted_pct2.values
+    }, index=sorted_labels).T
     table_fig = go.Figure(go.Table(
         header=dict(
-            values=[""] + display_labels,
+            values=[""] + sorted_labels,
             align='center', height=30, font=dict(size=11)
         ),
         cells=dict(
-            values=[table_df.index] + [table_df[label].tolist() for label in display_labels],
+            values=[table_df.index] + [table_df[label].tolist() for label in sorted_labels],
             align='center', height=28, font=dict(size=10)
         )
     ))
