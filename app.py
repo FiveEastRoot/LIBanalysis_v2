@@ -534,24 +534,55 @@ def plot_dq3(df):
 # ─────────────────────────────────────────────────────
 # DQ4: 병합 후 시각화
 # ─────────────────────────────────────────────────────
-def plot_dq4_simple(df):
-    # 1) DQ4로 시작하는 컬럼 자동 탐색
+def plot_dq4_lines(df):
+    # DQ4로 시작하는 컬럼 탐색
     cols = [c for c in df.columns if c.startswith("DQ4")]
     if len(cols) < 2:
         return None, None, ""
     col1, col2 = cols[0], cols[1]
+    question = f"{col1} vs {col2}"
+    # 응답 시리즈
+    s1 = df[col1].dropna().astype(str)
+    s2 = df[col2].dropna().astype(str)
+    # 카테고리 통합
+    categories = sorted(set(s1.unique()).union(s2.unique()))
+    # 카운트 및 비율
+    counts1 = s1.value_counts().reindex(categories, fill_value=0).astype(int)
+    counts2 = s2.value_counts().reindex(categories, fill_value=0).astype(int)
+    pct1 = (counts1 / counts1.sum() * 100).round(1)
+    pct2 = (counts2 / counts2.sum() * 100).round(1)
+    # 라인 그래프 생성
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=categories, y=pct1, mode='lines+markers',
+        name='1순위', line=dict(color='blue')
+    ))
+    fig.add_trace(go.Scatter(
+        x=categories, y=pct2, mode='lines+markers',
+        name='2순위', line=dict(color='green')
+    ))
+    fig.update_layout(
+        title="DQ4. 도서관 이용 주요 목적 1순위 vs 2순위",
+        xaxis_title="이용 목적",
+        yaxis_title="비율 (%)",
+        height=400,
+        margin=dict(t=60, b=100),
+        xaxis_tickangle=-15
+    )
+    # 하단 테이블 생성
+    table_df = pd.DataFrame({
+        '1순위 응답 수': counts1,
+        '1순위 비율(%)': pct1,
+        '2순위 응답 수': counts2,
+        '2순위 비율(%)': pct2
+    }, index=categories).T
+    table_fig = go.Figure(go.Table(
+        header=dict(values=[""] + list(table_df.columns), align='center', height=30, font=dict(size=11)),
+        cells=dict(values=[table_df.index] + [table_df[c].tolist() for c in table_df.columns], align='center', height=28, font=dict(size=10))
+    ))
+    table_fig.update_layout(height=250, margin=dict(t=10, b=5))
+    return fig, table_fig, question
 
-    # 2) 값 이어붙이기
-    series1 = df[col1].dropna().astype(str)
-    series2 = df[col2].dropna().astype(str)
-    combined = pd.concat([series1, series2], ignore_index=True)
-
-    # 3) 임시 DataFrame에 담아서 기존 함수 호출
-    question = "DQ4. 주요 목적 (1순위+2순위 결합)"
-    temp_df = pd.DataFrame({question: combined})
-    fig, tbl = plot_categorical_stacked_bar(temp_df, question)
-
-    return fig, tbl, question
 # ─────────────────────────────────────────────────────
 # ▶️ Streamlit 실행
 # ─────────────────────────────────────────────────────
@@ -624,49 +655,44 @@ with main_tabs[2]:
 # 4) 도서관 이용양태 분석
 with main_tabs[3]:
     st.header("📊 도서관 이용양태 분석")
-    # DQ1~DQ4를 각각 서브탭으로 분리
-    sub_tabs = st.tabs(["DQ1","DQ2","DQ3","DQ4"])
+    # 하위 탭: DQ1~5, DQ6 계열
+    sub_tabs = st.tabs(["DQ1~5","DQ6 계열"])
 
-    # DQ1
+    # --- DQ1~5 탭 ---
     with sub_tabs[0]:
-        st.subheader("DQ1 분석")
+        # DQ1
         fig1, tbl1, q1 = plot_dq1(df)
-        if fig1 is not None:
+        if fig1:
             st.subheader(q1)
             st.plotly_chart(fig1, use_container_width=True)
             st.plotly_chart(tbl1, use_container_width=True)
         else:
             st.warning("DQ1 문항이 없습니다.")
 
-    # DQ2
-    with sub_tabs[1]:
-        st.subheader("DQ2 분석")
+        # DQ2
         fig2, tbl2, q2 = plot_dq2(df)
-        if fig2 is not None:
+        if fig2:
             st.subheader(q2)
             st.plotly_chart(fig2, use_container_width=True)
             st.plotly_chart(tbl2, use_container_width=True)
         else:
             st.warning("DQ2 문항이 없습니다.")
 
-    # DQ3
-    with sub_tabs[2]:
-        st.subheader("DQ3 분석")
+        # DQ3
         fig3, tbl3, q3 = plot_dq3(df)
-        if fig3 is not None:
+        if fig3:
             st.subheader(q3)
             st.plotly_chart(fig3, use_container_width=True)
             st.plotly_chart(tbl3, use_container_width=True)
         else:
             st.warning("DQ3 문항이 없습니다.")
 
-    # DQ4
-    with sub_tabs[3]:
-        st.subheader("DQ4 분석 (1순위+2순위 결합)")
-        fig4, tbl4, q4 = plot_dq4_simple(df)
-        if fig4 is not None:
+        # DQ4
+        fig4, tbl4, q4 = plot_dq4_lines(df)
+        if fig4:
             st.subheader(q4)
             st.plotly_chart(fig4, use_container_width=True)
             st.plotly_chart(tbl4, use_container_width=True)
         else:
             st.warning("DQ4 문항이 2개 이상 필요합니다.")
+
