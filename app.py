@@ -513,38 +513,16 @@ def plot_dq2(df):
     return fig, tbl, question
 
 def plot_dq3(df):
-    # 자동 탐색
+    # DQ3 문항 자동 탐색
     cols = [c for c in df.columns if c.startswith("DQ3")]
     if not cols:
         return None, None, ""
     question = cols[0]
-
-    # 집계
-    raw_counts = df[question].dropna().astype(str).value_counts()
-    # 정렬된 raw keys
-    categories_raw = sorted(raw_counts.index.tolist())
-    # prefix 제거(display labels)
-    display_labels = [label.split('. ', 1)[-1] if '. ' in label else label for label in categories_raw]
-    # 순서 유지하고 값 가져오기
-    counts = raw_counts.reindex(categories_raw, fill_value=0)
-    percent = (counts / counts.sum() * 100).round(1)
-
-    # 세로 막대 그래프
-    fig = go.Figure(go.Bar(
-        x=display_labels,
-        y=counts.values,
-        text=counts.values,
-        textposition='outside',
-        marker_color="#1f77b4"
-    ))
-    fig.update_layout(
-        title=question,
-        yaxis_title="응답 수",
-        bargap=0.2,
-        height=450,
-        margin=dict(t=30, b=10),
-        
-    )
+    # 임시 DataFrame 생성
+    temp_df = df[[question]].dropna().astype(str)
+    # 기존 범주형 스택 바 호출
+    fig, table_fig = plot_categorical_stacked_bar(temp_df, question)
+    return fig, table_fig, question
 
     # 테이블
     table_df = pd.DataFrame({
@@ -641,6 +619,19 @@ def plot_dq4_bar(df):
 
     return fig, table_fig, question
 
+# ─────────────────────────────────────────────────────
+# DQ5: 범주형 누적 가로 Bar + Table (plot_categorical_stacked_bar 재활용)
+# ─────────────────────────────────────────────────────
+def plot_dq5(df):
+    # DQ5 문항 자동 탐색
+    cols = [c for c in df.columns if c.startswith("DQ5")]
+    if not cols:
+        return None, None, ""
+    question = cols[0]
+    temp_df = df[[question]].dropna().astype(str)
+    fig, table_fig = plot_categorical_stacked_bar(temp_df, question)
+    return fig, table_fig, question
+
 
 # ─────────────────────────────────────────────────────
 # ▶️ Streamlit 실행
@@ -719,35 +710,15 @@ with main_tabs[3]:
 
     # --- DQ1~5 탭 ---
     with sub_tabs[0]:
-        # DQ1
+        # DQ1~DQ2~DQ3~DQ4 기존 구현
         fig1, tbl1, q1 = plot_dq1(df)
-        if fig1:
-            st.plotly_chart(fig1, use_container_width=True)
-            st.plotly_chart(tbl1, use_container_width=True)
-        else:
-            st.warning("DQ1 문항이 없습니다.")
-
-        # DQ2
+        if fig1: st.subheader(q1); st.plotly_chart(fig1, use_container_width=True); st.plotly_chart(tbl1, use_container_width=True)
         fig2, tbl2, q2 = plot_dq2(df)
-        if fig2:
-            st.plotly_chart(fig2, use_container_width=True)
-            st.plotly_chart(tbl2, use_container_width=True)
-        else:
-            st.warning("DQ2 문항이 없습니다.")
-
-        # DQ3
+        if fig2: st.subheader(q2); st.plotly_chart(fig2, use_container_width=True); st.plotly_chart(tbl2, use_container_width=True)
         fig3, tbl3, q3 = plot_dq3(df)
-        if fig3:
-            st.plotly_chart(fig3, use_container_width=True)
-            st.plotly_chart(tbl3, use_container_width=True)
-        else:
-            st.warning("DQ3 문항이 없습니다.")
-
-        # DQ4 (스택형 세로 Bar)
+        if fig3: st.subheader(q3); st.plotly_chart(fig3, use_container_width=True); st.plotly_chart(tbl3, use_container_width=True)
         fig4, tbl4, q4 = plot_dq4_bar(df)
-        if fig4:
-            st.plotly_chart(fig4, use_container_width=True)
-            st.plotly_chart(tbl4, use_container_width=True)
-        else:
-            st.warning("DQ4 문항이 2개 이상 필요합니다.")
+        if fig4: st.subheader(q4); st.plotly_chart(fig4, use_container_width=True); st.plotly_chart(tbl4, use_container_width=True)
+        fig5, tbl5, q5 = plot_dq5(df)
+        if fig5: st.subheader(q5); st.plotly_chart(fig5, use_container_width=True); st.plotly_chart(tbl5, use_container_width=True)
 
