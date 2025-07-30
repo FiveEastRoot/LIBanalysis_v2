@@ -696,8 +696,8 @@ with main_tabs[3]:
         else:
             st.warning("DQ3 문항이 없습니다.")
 
-        # DQ4
-        fig4, tbl4, q4 = plot_dq4_lines(df)
+        # DQ4 (스택형 세로 Bar)
+        fig4, tbl4, q4 = plot_dq4_bar(df)
         if fig4:
             st.subheader(q4)
             st.plotly_chart(fig4, use_container_width=True)
