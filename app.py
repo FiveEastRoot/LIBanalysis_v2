@@ -714,7 +714,7 @@ def plot_pair_bar(df, prefix):
     if len(cols) < 2:
         return None, None, ""
     col1, col2 = cols[0], cols[1]
-    question = f"{col1} vs {col2}"
+    question = f"{col1} vs (2순위)"
     s1 = df[col1].dropna().astype(str)
     s2 = df[col2].dropna().astype(str)
     cats = sorted(set(s1.unique()).union(s2.unique()))
