@@ -539,12 +539,11 @@ def plot_dq3(df):
     ))
     fig.update_layout(
         title=question,
-        xaxis_title="응답",
         yaxis_title="응답 수",
         bargap=0.2,
-        height=400,
-        margin=dict(t=50, b=100),
-        xaxis_tickangle=-15
+        height=450,
+        margin=dict(t=30, b=10),
+        
     )
 
     # 테이블
