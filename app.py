@@ -617,7 +617,7 @@ def plot_dq4_bar(df):
         xaxis_title="이용 목적",
         yaxis_title="응답자 수",
         height=650,
-        margin=dict(t=10, b=10),
+        margin=dict(t=30, b=10),
         xaxis_tickangle=-23
     )
 
