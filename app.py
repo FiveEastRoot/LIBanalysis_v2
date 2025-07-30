@@ -722,3 +722,50 @@ with main_tabs[3]:
         fig5, tbl5, q5 = plot_dq5(df)
         if fig5: st.subheader(q5); st.plotly_chart(fig5, use_container_width=True); st.plotly_chart(tbl5, use_container_width=True)
 
+
+    # --- DQ6 계열 탭 ---
+    with sub_tabs[1]:
+        st.subheader("DQ6 계열 문항 분석")
+        # DQ6부터 DQ6-3까지 자동 탐색
+        dq6_cols = [c for c in df.columns if c.startswith("DQ6")]
+        if not dq6_cols:
+            st.warning("DQ6 계열 문항이 없습니다.")
+        else:
+            for col in dq6_cols:
+                st.markdown(f"### {col}")
+                # 1) DQ6 (복수선택) -> 멀티 응답 explode 후 카운트
+                if col == dq6_cols[0]:  # 첫번째 DQ6 문항
+                    multi = df[col].dropna().astype(str).str.split(',')
+                    exploded = multi.explode().str.strip()
+                    counts = exploded.value_counts()
+                    percent = (counts / counts.sum() * 100).round(1)
+                    # 가로 막대 차트
+                    fig = go.Figure(go.Bar(
+                        x=counts.values, y=counts.index,
+                        orientation='h', text=counts.values,
+                        textposition='outside', marker_color=px.colors.qualitative.Plotly
+                    ))
+                    fig.update_layout(
+                        title=col,
+                        xaxis_title="응답 수",
+                        yaxis_title="서비스",
+                        height=400,
+                        margin=dict(t=50, b=100)
+                    )
+                    # 테이블
+                    table_df = pd.DataFrame({
+                        '응답 수': counts,
+                        '비율 (%)': percent
+                    }).T
+                    table_fig = go.Figure(go.Table(
+                        header=dict(values=[""] + list(table_df.columns), align='center'),
+                        cells=dict(values=[table_df.index] + [table_df[c].tolist() for c in table_df.columns], align='center')
+                    ))
+                    table_fig.update_layout(height=250, margin=dict(t=10,b=5))
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(table_fig, use_container_width=True)
+                else:
+                    # DQ6-1 ~ DQ6-3: 단일 선택 카테고리
+                    bar, tbl = plot_categorical_stacked_bar(df, col)
+                    st.plotly_chart(bar, use_container_width=True)
+                    st.plotly_chart(tbl, use_container_width=True)
