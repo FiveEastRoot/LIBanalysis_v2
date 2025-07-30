@@ -732,9 +732,9 @@ def plot_pair_bar(df, prefix):
         title=f"{question}",
         xaxis_title="응답",
         yaxis_title="응답자 수",
-        height=400,
+        height=450,
         margin=dict(t=50, b=100),
-        xaxis_tickangle=-15
+        xaxis_tickangle=-23
     )
     # 테이블
     pct1 = (counts1 / counts1.sum() * 100).round(1)
