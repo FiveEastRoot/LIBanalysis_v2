@@ -512,54 +512,87 @@ def plot_dq2(df):
     tbl.update_layout(height=250, margin=dict(t=10,b=5))
     return fig, tbl, question
 
-# ─────────────────────────────────────────────────────
-# DQ3: 기존 자동 탐색
-# ─────────────────────────────────────────────────────
 def plot_dq3(df):
+    # 자동 탐색
     cols = [c for c in df.columns if c.startswith("DQ3")]
     if not cols:
         return None, None, ""
     question = cols[0]
-    counts = df[question].dropna().astype(str).value_counts().sort_index()
-    pct = (counts/counts.sum()*100).round(1)
-    fig = go.Figure(go.Bar(x=counts.index, y=counts.values, text=counts.values,
-                            textposition='outside', marker_color="#1f77b4"))
-    fig.update_layout(title=question, yaxis_title="응답 수",
-                      bargap=0.2, height=450, margin=dict(t=30,b=50), xaxis_tickangle=-15)
-    tbl_df = pd.DataFrame({"응답 수":counts, "비율 (%)":pct}).T
-    tbl = go.Figure(go.Table(header=dict(values=[""]+list(tbl_df.columns)),
-                               cells=dict(values=[tbl_df.index]+[tbl_df[c].tolist() for c in tbl_df.columns])))
-    tbl.update_layout(height=350, margin=dict(t=10,b=5))
-    return fig, tbl, question
+
+    # 집계
+    raw_counts = df[question].dropna().astype(str).value_counts()
+    # 정렬된 raw keys
+    categories_raw = sorted(raw_counts.index.tolist())
+    # prefix 제거(display labels)
+    display_labels = [label.split('. ', 1)[-1] if '. ' in label else label for label in categories_raw]
+    # 순서 유지하고 값 가져오기
+    counts = raw_counts.reindex(categories_raw, fill_value=0)
+    percent = (counts / counts.sum() * 100).round(1)
+
+    # 세로 막대 그래프
+    fig = go.Figure(go.Bar(
+        x=display_labels,
+        y=counts.values,
+        text=counts.values,
+        textposition='outside',
+        marker_color="#1f77b4"
+    ))
+    fig.update_layout(
+        title=question,
+        xaxis_title="응답",
+        yaxis_title="응답 수",
+        bargap=0.2,
+        height=400,
+        margin=dict(t=50, b=100),
+        xaxis_tickangle=-15
+    )
+
+    # 테이블
+    table_df = pd.DataFrame({
+        "응답 수": counts.values,
+        "비율 (%)": percent.values
+    }, index=display_labels).T
+    table_fig = go.Figure(go.Table(
+        header=dict(
+            values=[""] + display_labels,
+            align='center', font=dict(size=11), height=30
+        ),
+        cells=dict(
+            values=[table_df.index] + [table_df[label].tolist() for label in display_labels],
+            align='center', font=dict(size=10), height=28
+        )
+    ))
+    table_fig.update_layout(height=250, margin=dict(t=10, b=5))
+
+    return fig, table_fig, question
 
 # ─────────────────────────────────────────────────────
-# DQ4: 1순위 vs 2순위 누적 세로 Bar 그래프 + Table
+# DQ4: 누적 세로 Bar 그래프 + Table (번호 prefix 제거)
 # ─────────────────────────────────────────────────────
 def plot_dq4_bar(df):
-    # DQ4로 시작하는 컬럼 탐색
     cols = [c for c in df.columns if c.startswith("DQ4")]
     if len(cols) < 2:
         return None, None, ""
     col1, col2 = cols[0], cols[1]
     question = f"{col1} vs {col2}"
-    # 응답 시리즈
+
     s1 = df[col1].dropna().astype(str)
     s2 = df[col2].dropna().astype(str)
-    # 카테고리 통합
-    categories = sorted(set(s1.unique()).union(s2.unique()))
-    # 카운트 및 비율
-    counts1 = s1.value_counts().reindex(categories, fill_value=0)
-    counts2 = s2.value_counts().reindex(categories, fill_value=0)
+    categories_raw = sorted(set(s1.unique()).union(s2.unique()))
+    display_labels = [label.split('. ', 1)[-1] if '. ' in label else label for label in categories_raw]
+
+    counts1 = s1.value_counts().reindex(categories_raw, fill_value=0)
+    counts2 = s2.value_counts().reindex(categories_raw, fill_value=0)
     pct1 = (counts1 / counts1.sum() * 100).round(1)
     pct2 = (counts2 / counts2.sum() * 100).round(1)
-    # 누적 세로 Bar그래프 생성
+
     fig = go.Figure()
     fig.add_trace(go.Bar(
-        x=categories, y=pct1,
+        x=display_labels, y=pct1,
         name='1순위', marker_color='blue', text=pct1, textposition='outside'
     ))
     fig.add_trace(go.Bar(
-        x=categories, y=pct2,
+        x=display_labels, y=pct2,
         name='2순위', marker_color='green', text=pct2, textposition='outside'
     ))
     fig.update_layout(
@@ -571,24 +604,25 @@ def plot_dq4_bar(df):
         margin=dict(t=60, b=100),
         xaxis_tickangle=-15
     )
-    # 하단 테이블 생성
+
     table_df = pd.DataFrame({
-        '1순위 응답 수': counts1,
-        '1순위 비율(%)': pct1,
-        '2순위 응답 수': counts2,
-        '2순위 비율(%)': pct2
-    }, index=categories).T
+        '1순위 응답 수': counts1.values,
+        '1순위 비율(%)': pct1.values,
+        '2순위 응답 수': counts2.values,
+        '2순위 비율(%)': pct2.values
+    }, index=display_labels).T
     table_fig = go.Figure(go.Table(
         header=dict(
-            values=[""] + list(table_df.columns),
+            values=[""] + display_labels,
             align='center', height=30, font=dict(size=11)
         ),
         cells=dict(
-            values=[table_df.index] + [table_df[c].tolist() for c in table_df.columns],
+            values=[table_df.index] + [table_df[label].tolist() for label in display_labels],
             align='center', height=28, font=dict(size=10)
         )
     ))
     table_fig.update_layout(height=250, margin=dict(t=10, b=5))
+
     return fig, table_fig, question
 
 
@@ -672,7 +706,6 @@ with main_tabs[3]:
         # DQ1
         fig1, tbl1, q1 = plot_dq1(df)
         if fig1:
-            st.subheader(q1)
             st.plotly_chart(fig1, use_container_width=True)
             st.plotly_chart(tbl1, use_container_width=True)
         else:
@@ -681,7 +714,6 @@ with main_tabs[3]:
         # DQ2
         fig2, tbl2, q2 = plot_dq2(df)
         if fig2:
-            st.subheader(q2)
             st.plotly_chart(fig2, use_container_width=True)
             st.plotly_chart(tbl2, use_container_width=True)
         else:
@@ -690,7 +722,6 @@ with main_tabs[3]:
         # DQ3
         fig3, tbl3, q3 = plot_dq3(df)
         if fig3:
-            st.subheader(q3)
             st.plotly_chart(fig3, use_container_width=True)
             st.plotly_chart(tbl3, use_container_width=True)
         else:
@@ -699,7 +730,6 @@ with main_tabs[3]:
         # DQ4 (스택형 세로 Bar)
         fig4, tbl4, q4 = plot_dq4_bar(df)
         if fig4:
-            st.subheader(q4)
             st.plotly_chart(fig4, use_container_width=True)
             st.plotly_chart(tbl4, use_container_width=True)
         else:
