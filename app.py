@@ -653,7 +653,7 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
     # 다이버징 스택형 바: 부정(7~5) ← 중립(4) → 긍정(3~1)
     fig = go.Figure()
     neg_scores = [7,6,5]
-    neg_colors = ["#d73027","#fc8d59","#fee090"]
+    neg_colors = ["#91bfdb","#4575b4","#313695"]  # 색상 반전: 긍정(1~3) 색상
     for score, color in zip(neg_scores, neg_colors):
         fig.add_trace(go.Bar(
             y=likert_df.index,
@@ -672,7 +672,7 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
     ))
     # 긍정(3~1)
     pos_scores = [3,2,1]
-    pos_colors = ["#91bfdb","#4575b4","#313695"]
+    pos_colors = ["#d73027","#fc8d59","#fee090"]  # 색상 반전: 부정(5~7) 색상
     for score, color in zip(pos_scores, pos_colors):
         fig.add_trace(go.Bar(
             y=likert_df.index,
@@ -702,7 +702,6 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
         )
     ))
     return fig, table_fig
-
 
 
 # ─────────────────────────────────────────────────────
