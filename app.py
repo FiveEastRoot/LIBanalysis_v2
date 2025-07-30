@@ -702,6 +702,7 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
             values=[table_df.index] + [table_df[c].tolist() for c in table_df.columns],
             align='center'
         )
+    table_fig.update_layout(margin=dict(t=5, b=5))
     ))
     return fig, table_fig
 
