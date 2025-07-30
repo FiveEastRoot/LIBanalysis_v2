@@ -531,10 +531,11 @@ def plot_dq3(df):
                                cells=dict(values=[tbl_df.index]+[tbl_df[c].tolist() for c in tbl_df.columns])))
     tbl.update_layout(height=350, margin=dict(t=10,b=5))
     return fig, tbl, question
+
 # ─────────────────────────────────────────────────────
-# DQ4: 병합 후 시각화
+# DQ4: 1순위 vs 2순위 누적 세로 Bar 그래프 + Table
 # ─────────────────────────────────────────────────────
-def plot_dq4_lines(df):
+def plot_dq4_bar(df):
     # DQ4로 시작하는 컬럼 탐색
     cols = [c for c in df.columns if c.startswith("DQ4")]
     if len(cols) < 2:
@@ -547,21 +548,22 @@ def plot_dq4_lines(df):
     # 카테고리 통합
     categories = sorted(set(s1.unique()).union(s2.unique()))
     # 카운트 및 비율
-    counts1 = s1.value_counts().reindex(categories, fill_value=0).astype(int)
-    counts2 = s2.value_counts().reindex(categories, fill_value=0).astype(int)
+    counts1 = s1.value_counts().reindex(categories, fill_value=0)
+    counts2 = s2.value_counts().reindex(categories, fill_value=0)
     pct1 = (counts1 / counts1.sum() * 100).round(1)
     pct2 = (counts2 / counts2.sum() * 100).round(1)
-    # 라인 그래프 생성
+    # 누적 세로 Bar그래프 생성
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=categories, y=pct1, mode='lines+markers',
-        name='1순위', line=dict(color='blue')
+    fig.add_trace(go.Bar(
+        x=categories, y=pct1,
+        name='1순위', marker_color='blue', text=pct1, textposition='outside'
     ))
-    fig.add_trace(go.Scatter(
-        x=categories, y=pct2, mode='lines+markers',
-        name='2순위', line=dict(color='green')
+    fig.add_trace(go.Bar(
+        x=categories, y=pct2,
+        name='2순위', marker_color='green', text=pct2, textposition='outside'
     ))
     fig.update_layout(
+        barmode='stack',
         title="DQ4. 도서관 이용 주요 목적 1순위 vs 2순위",
         xaxis_title="이용 목적",
         yaxis_title="비율 (%)",
@@ -577,11 +579,18 @@ def plot_dq4_lines(df):
         '2순위 비율(%)': pct2
     }, index=categories).T
     table_fig = go.Figure(go.Table(
-        header=dict(values=[""] + list(table_df.columns), align='center', height=30, font=dict(size=11)),
-        cells=dict(values=[table_df.index] + [table_df[c].tolist() for c in table_df.columns], align='center', height=28, font=dict(size=10))
+        header=dict(
+            values=[""] + list(table_df.columns),
+            align='center', height=30, font=dict(size=11)
+        ),
+        cells=dict(
+            values=[table_df.index] + [table_df[c].tolist() for c in table_df.columns],
+            align='center', height=28, font=dict(size=10)
+        )
     ))
     table_fig.update_layout(height=250, margin=dict(t=10, b=5))
     return fig, table_fig, question
+
 
 # ─────────────────────────────────────────────────────
 # ▶️ Streamlit 실행
