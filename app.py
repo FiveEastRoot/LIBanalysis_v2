@@ -684,6 +684,7 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
     fig.update_layout(
         barmode='relative',
         title="DQ7-E 도서관 이미지 분포 (다이버징 바)",
+        xaxis=dict(visible=False),  # X축 레이블 및 눈금 표시 없음
         legend=dict(traceorder='normal')
     )
 
