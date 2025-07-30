@@ -659,7 +659,6 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
     for score, color in zip(neg_scores, neg_colors):
         fig.add_trace(go.Bar(
             y=likert_df.index,
-            x=-likert_df[score],
             name=f"{score}점",
             orientation='h',
             marker_color=color
@@ -667,7 +666,6 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
     # 중립(4)
     fig.add_trace(go.Bar(
         y=likert_df.index,
-        x=likert_df[4],
         name="4점",
         orientation='h',
         marker_color="#dddddd"
@@ -676,7 +674,6 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
     for score, color in zip([5,6,7],["#fee090","#fc8d59","#d73027"]):  # 5~7점 부정 색상 (빨강 계열)
         fig.add_trace(go.Bar(
             y=likert_df.index,
-            x=likert_df[score],
             name=f"{score}점",
             orientation='h',
             marker_color=color
