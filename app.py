@@ -632,29 +632,28 @@ def plot_dq5(df):
     fig, table_fig = plot_categorical_stacked_bar(temp_df, question)
     return fig, table_fig, question
 
+
 # ─────────────────────────────────────────────────────
 # DQ7-E: 다이버징 스택형 바 차트 (Likert) 함수 정의
 # ─────────────────────────────────────────────────────
 def plot_likert_diverging(df, prefix="DQ7-E"):
-    # 해당 prefix로 시작하는 문항들 탐색
+    # DQ7-E 계열 문항 자동 탐색
     cols = [c for c in df.columns if c.startswith(prefix)]
     if not cols:
         return None, None
-    # 1~7 점수 분포 계산
+    # 1~7 점수별 % 계산 및 DataFrame 생성
     dist = {}
     for col in cols:
         counts = df[col].dropna().astype(int).value_counts().reindex(range(1,8), fill_value=0)
         pct = (counts / counts.sum() * 100).round(1)
         dist[col] = pct
-    likert_df = pd.DataFrame(dist).T  # index: 문항, columns: 1~7
-    # 명시적 컬럼 순서 보장
-    likert_df = likert_df.reindex(columns=range(1,8))
+    likert_df = pd.DataFrame(dist).T
+    likert_df = likert_df.reindex(columns=range(1,8))  # 1~7 순서 보장
 
-        # 다이버징 스택 바
+    # 다이버징 스택형 바: 부정(7~5) ← 중립(4) → 긍정(3~1)
     fig = go.Figure()
-    # 부정(1-3): 스택 순서 변경하여 1점이 가장 왼쪽(외곽)에 위치하도록
-    neg_scores = [3,2,1]
-    neg_colors = ["#fee090","#fc8d59","#d73027"]  # 3점→2점→1점 순서
+    neg_scores = [7,6,5]
+    neg_colors = ["#d73027","#fc8d59","#fee090"]
     for score, color in zip(neg_scores, neg_colors):
         fig.add_trace(go.Bar(
             y=likert_df.index,
@@ -663,7 +662,7 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
             orientation='h',
             marker_color=color
         ))
-    # 중립(4)
+    # 중립(4점)
     fig.add_trace(go.Bar(
         y=likert_df.index,
         x=likert_df[4],
@@ -671,8 +670,10 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
         orientation='h',
         marker_color="#dddddd"
     ))
-    # 긍정(5-7)
-    for score, color in zip([5,6,7],["#91bfdb","#4575b4","#313695"]):
+    # 긍정(3~1)
+    pos_scores = [3,2,1]
+    pos_colors = ["#91bfdb","#4575b4","#313695"]
+    for score, color in zip(pos_scores, pos_colors):
         fig.add_trace(go.Bar(
             y=likert_df.index,
             x=likert_df[score],
@@ -682,24 +683,26 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
         ))
     fig.update_layout(
         barmode='relative',
-        title="DQ7-E 도서관 이미지 분포 (다이버징 바)",
+        title="DQ7-E 도서관 이미지 분포 (다이버징 스택 바)",
+        xaxis_tickformat='%',
         legend=dict(traceorder='normal')
     )
 
-    # 테이블: 명시적 컬럼 순서
+    # 테이블 생성: 1~7점 순서
     table_df = likert_df.copy()
     table_df = table_df.reindex(columns=range(1,8))
     table_fig = go.Figure(go.Table(
         header=dict(
             values=["문항"] + [f"{c}점" for c in table_df.columns],
-            align='center'
+            align='center', font=dict(size=11), height=30
         ),
         cells=dict(
             values=[table_df.index] + [table_df[c].tolist() for c in table_df.columns],
-            align='center'
+            align='center', font=dict(size=10), height=28
         )
     ))
     return fig, table_fig
+
 
 
 # ─────────────────────────────────────────────────────
