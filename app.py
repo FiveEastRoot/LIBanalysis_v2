@@ -706,6 +706,51 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
     table_fig.update_layout(margin=dict(t=5, b=5))
     return fig, table_fig
 
+# ─────────────────────────────────────────────────────
+# DQ8 & DQ9: 1순위 vs 2순위 누적 세로 Bar 차트 공통 함수
+# ─────────────────────────────────────────────────────
+def plot_pair_bar(df, prefix):
+    cols = [c for c in df.columns if c.startswith(prefix)]
+    if len(cols) < 2:
+        return None, None, ""
+    col1, col2 = cols[0], cols[1]
+    question = f"{col1} vs {col2}"
+    s1 = df[col1].dropna().astype(str)
+    s2 = df[col2].dropna().astype(str)
+    cats = sorted(set(s1.unique()).union(s2.unique()))
+    # 번호 제거 라벨
+    labels = [c.split('. ',1)[-1] if '. ' in c else c for c in cats]
+    # 응답자 수
+    counts1 = s1.value_counts().reindex(cats, fill_value=0)
+    counts2 = s2.value_counts().reindex(cats, fill_value=0)
+    # 막대 차트
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=labels, y=counts1, name='1순위', marker_color='blue', text=counts1, textposition='outside'))
+    fig.add_trace(go.Bar(x=labels, y=counts2, name='2순위', marker_color='green', text=counts2, textposition='outside'))
+    fig.update_layout(
+        barmode='stack',
+        title=f"{question}",
+        xaxis_title="응답",
+        yaxis_title="응답자 수",
+        height=400,
+        margin=dict(t=50, b=100),
+        xaxis_tickangle=-15
+    )
+    # 테이블
+    pct1 = (counts1 / counts1.sum() * 100).round(1)
+    pct2 = (counts2 / counts2.sum() * 100).round(1)
+    table_df = pd.DataFrame({
+        '1순위 응답 수': counts1.values,
+        '1순위 비율(%)': pct1.values,
+        '2순위 응답 수': counts2.values,
+        '2순위 비율(%)': pct2.values
+    }, index=labels).T
+    table_fig = go.Figure(go.Table(
+        header=dict(values=[""] + labels, align='center'),
+        cells=dict(values=[table_df.index] + [table_df[l].tolist() for l in labels], align='center')
+    ))
+    table_fig.update_layout(height=250, margin=dict(t=10, b=5))
+    return fig, table_fig, question
 
 
 # ─────────────────────────────────────────────────────
@@ -730,7 +775,8 @@ main_tabs = st.tabs([
     "📈 만족도 기본 시각화",
     "🗺️ 자치구 구성 문항",
     "📊도서관 이용양태 분석",
-    "🖼️ 도서관 이미지 분석"
+    "🖼️ 도서관 이미지 분석",
+     "🏋️ 도서관 강약점 분석"
 ])
 
 # 1) 응답자 정보
@@ -855,3 +901,22 @@ with main_tabs[4]:
     else:
         st.warning("DQ7-E 문항이 없습니다.")
 
+# 6) 도서관 강약점 분석 탭
+with main_tabs[5]:
+    st.header("🏋️ 도서관 강약점 분석")
+    # DQ8: 강점
+    fig8, tbl8, q8 = plot_pair_bar(df, "DQ8")
+    if fig8 is not None:
+        st.subheader(q8)
+        st.plotly_chart(fig8, use_container_width=True)
+        st.plotly_chart(tbl8, use_container_width=True)
+    else:
+        st.warning("DQ8 문항이 없습니다.")
+    # DQ9: 약점
+    fig9, tbl9, q9 = plot_pair_bar(df, "DQ9")
+    if fig9 is not None:
+        st.subheader(q9)
+        st.plotly_chart(fig9, use_container_width=True)
+        st.plotly_chart(tbl9, use_container_width=True)
+    else:
+        st.warning("DQ9 문항이 없습니다.")
