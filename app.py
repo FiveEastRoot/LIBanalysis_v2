@@ -583,28 +583,31 @@ def plot_dq4_bar(df):
 
     counts1 = s1.value_counts().reindex(categories_raw, fill_value=0)
     counts2 = s2.value_counts().reindex(categories_raw, fill_value=0)
+    # percent calculations preserved for table
     pct1 = (counts1 / counts1.sum() * 100).round(1)
     pct2 = (counts2 / counts2.sum() * 100).round(1)
 
+    # 누적 세로 Bar그래프 생성 (응답자 수)
     fig = go.Figure()
     fig.add_trace(go.Bar(
-        x=display_labels, y=pct1,
-        name='1순위', marker_color='blue', text=pct1, textposition='outside'
+        x=display_labels, y=counts1,
+        name='1순위', marker_color='blue', text=counts1, textposition='outside'
     ))
     fig.add_trace(go.Bar(
-        x=display_labels, y=pct2,
-        name='2순위', marker_color='green', text=pct2, textposition='outside'
+        x=display_labels, y=counts2,
+        name='2순위', marker_color='green', text=counts2, textposition='outside'
     ))
     fig.update_layout(
         barmode='stack',
         title="DQ4. 도서관 이용 주요 목적 1순위 vs 2순위",
         xaxis_title="이용 목적",
-        yaxis_title="비율 (%)",
+        yaxis_title="응답자 수",
         height=400,
         margin=dict(t=60, b=100),
         xaxis_tickangle=-15
     )
 
+    # 하단 테이블 생성 (응답 수 + 비율)
     table_df = pd.DataFrame({
         '1순위 응답 수': counts1.values,
         '1순위 비율(%)': pct1.values,
