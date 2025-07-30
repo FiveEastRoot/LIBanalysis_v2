@@ -907,7 +907,6 @@ with main_tabs[5]:
     # DQ8: 강점
     fig8, tbl8, q8 = plot_pair_bar(df, "DQ8")
     if fig8 is not None:
-        st.subheader(q8)
         st.plotly_chart(fig8, use_container_width=True)
         st.plotly_chart(tbl8, use_container_width=True)
     else:
@@ -915,7 +914,6 @@ with main_tabs[5]:
     # DQ9: 약점
     fig9, tbl9, q9 = plot_pair_bar(df, "DQ9")
     if fig9 is not None:
-        st.subheader(q9)
         st.plotly_chart(fig9, use_container_width=True)
         st.plotly_chart(tbl9, use_container_width=True)
     else:
