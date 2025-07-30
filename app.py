@@ -419,11 +419,7 @@ def page_basic_vis(df):
         "도서관의 공익성 및 기여도": [
             q for q in likert_qs 
             if q.startswith("Q7-") or q.startswith("Q8")  # 이제 Q8. 문항도 포함
-        ],
-        "자치구 구성 문항":       [
-            q for q in likert_qs 
-            if q.startswith("Q9-") and not q.startswith("Q9-DS")
-        ],
+        ]
     }
 
     tabs = st.tabs(list(section_mapping.keys()))
