@@ -730,10 +730,9 @@ def plot_pair_bar(df, prefix):
     fig.update_layout(
         barmode='stack',
         title=f"{question}",
-        xaxis_title="응답",
         yaxis_title="응답자 수",
         height=550,
-        margin=dict(t=50, b=100),
+        margin=dict(t=50, b=70),
         xaxis_tickangle=-23
     )
     # 테이블
@@ -749,7 +748,7 @@ def plot_pair_bar(df, prefix):
         header=dict(values=[""] + labels, align='center'),
         cells=dict(values=[table_df.index] + [table_df[l].tolist() for l in labels], align='center')
     ))
-    table_fig.update_layout(height=250, margin=dict(t=10, b=5))
+    table_fig.update_layout(height=250, margin=dict(t=10, b=10))
     return fig, table_fig, question
 
 
