@@ -732,7 +732,7 @@ def plot_pair_bar(df, prefix):
         title=f"{question}",
         xaxis_title="응답",
         yaxis_title="응답자 수",
-        height=450,
+        height=550,
         margin=dict(t=50, b=100),
         xaxis_tickangle=-23
     )
