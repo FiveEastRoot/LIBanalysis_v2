@@ -264,11 +264,6 @@ def map_keyword_to_category(keyword):
     return "해당없음"
 
 # 단순 분할(Fallback)
-def is_trivial(text):
-    text = str(text).strip()
-    return text in ["", "X", "x", "감사합니다", "감사", "없음"]
-
-# 단순 분할(Fallback)
 def split_keywords_simple(text):
     parts = re.split(r"[.,/\s]+", text)
     return [p.strip() for p in parts if len(p.strip()) > 1]
@@ -536,8 +531,27 @@ def plot_dq3(df):
                                cells=dict(values=[tbl_df.index]+[tbl_df[c].tolist() for c in tbl_df.columns])))
     tbl.update_layout(height=350, margin=dict(t=10,b=5))
     return fig, tbl, question
+# ─────────────────────────────────────────────────────
+# DQ4: 병합 후 시각화
+# ─────────────────────────────────────────────────────
+def plot_dq4_simple(df):
+    # 1) DQ4로 시작하는 컬럼 자동 탐색
+    cols = [c for c in df.columns if c.startswith("DQ4")]
+    if len(cols) < 2:
+        return None, None, ""
+    col1, col2 = cols[0], cols[1]
 
+    # 2) 값 이어붙이기
+    series1 = df[col1].dropna().astype(str)
+    series2 = df[col2].dropna().astype(str)
+    combined = pd.concat([series1, series2], ignore_index=True)
 
+    # 3) 임시 DataFrame에 담아서 기존 함수 호출
+    question = "DQ4. 주요 목적 (1순위+2순위 결합)"
+    temp_df = pd.DataFrame({question: combined})
+    fig, tbl = plot_categorical_stacked_bar(temp_df, question)
+
+    return fig, tbl, question
 # ─────────────────────────────────────────────────────
 # ▶️ Streamlit 실행
 # ─────────────────────────────────────────────────────
@@ -607,7 +621,7 @@ with main_tabs[2]:
             answers = df[long_cols[0]].dropna().astype(str).tolist()
             df_long = process_answers(answers)
             show_short_answer_keyword_analysis(df_long)
-# 4) 도서관 이용양태 분
+# 4) 도서관 이용양태 분석
 with main_tabs[3]:
     st.header("📊 도서관 이용양태 분석")
 
@@ -632,3 +646,13 @@ if fig3 is not None:
     st.plotly_chart(fig3, use_container_width=True)
     st.plotly_chart(tbl3, use_container_width=True)
 
+    # DQ4
+    with sub_tabs[3]:
+        st.subheader("DQ4 분석 (1순위+2순위 결합)")
+        fig4, tbl4, q4 = plot_dq4_simple(df)
+        if fig4 is not None:
+            st.subheader(q4)
+            st.plotly_chart(fig4, use_container_width=True)
+            st.plotly_chart(tbl4, use_container_width=True)
+        else:
+            st.warning("DQ4 문항이 2개 이상 필요합니다.")
