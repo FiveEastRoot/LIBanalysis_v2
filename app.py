@@ -685,11 +685,7 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
         title="DQ7-E 도서관 이미지 분포 (다이버징 바)",
         legend=dict(traceorder='normal')
     )
-        barmode='relative',
-        title="DQ7-E 도서관 이미지 분포 (다이버징 바)",
-        xaxis_tickformat='%',
-        legend=dict(traceorder='normal')
-    )
+
     # 테이블: 명시적 컬럼 순서
     table_df = likert_df.copy()
     table_df = table_df.reindex(columns=range(1,8))
