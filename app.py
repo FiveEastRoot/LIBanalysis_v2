@@ -616,8 +616,8 @@ def plot_dq4_bar(df):
         title="DQ4. 도서관 이용 주요 목적 1순위 vs 2순위",
         xaxis_title="이용 목적",
         yaxis_title="응답자 수",
-        height=650,
-        margin=dict(t=30, b=10),
+        height=550,
+        margin=dict(t=40, b=10),
         xaxis_tickangle=-23
     )
 
