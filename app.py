@@ -846,12 +846,10 @@ def plot_within_category_bar(df, midcategory):
         marker_color='steelblue'
     ))
     if mid_mean is not None:
-        fig.add_vline(x=mid_mean, line_dash="dash", line_color="red",
-                      annotation_text=f"중분류 평균 {mid_mean:.2f}", annotation_position="top right")
+        fig.add_vline(x=mid_mean, line_dash="dash", line_color="red")
     fig.update_layout(
         title=f"{midcategory} 내 문항별 평균 점수 비교 (0~100 환산)",
-        xaxis_title="평균 점수",
-        height=300,
+        xaxis_title=f"{midcategory}중분류 평균 {mid_mean:.2f}",
         margin=dict(t=40, b=60)
     )
     # 하단 표: 항목별 평균 + 편차
