@@ -780,8 +780,8 @@ def plot_pair_bar(df, prefix):
     pct2 = (counts2 / counts2.sum() * 100).round(1)
 
     fig = go.Figure()
-    fig.add_trace(go.Bar(x=labels, y=counts1, name='1순위', marker_color='blue', text=counts1, textposition='outside'))
-    fig.add_trace(go.Bar(x=labels, y=counts2, name='2순위', marker_color='green', text=counts2, textposition='outside'))
+    fig.add_trace(go.Bar(x=labels, y=counts1, name='1순위', marker_color='light blue', text=counts1, textposition='outside'))
+    fig.add_trace(go.Bar(x=labels, y=counts2, name='2순위', marker_color='light green', text=counts2, textposition='outside'))
     fig.update_layout(
         barmode='stack',
         title=f"{question}",
