@@ -1160,7 +1160,7 @@ def show_segment_heatmap(group_means, segment_cols, midcats):
     fig.update_layout(height=300 + 24*len(heatmap_plot), yaxis_nticks=min(len(heatmap_plot), 30))
 
     st.plotly_chart(fig, use_container_width=True)
-    show_segment_heatmap(group_means, segment_cols_filtered, midcats)
+    
  # 1. 각 세그먼트별 중분류별 평균점수 집계 (group_means DataFrame)
     midcats = list(MIDCAT_MAP.keys())
     group_means = []
@@ -1213,6 +1213,7 @@ def show_segment_heatmap(group_means, segment_cols, midcats):
     counts_for_display = counts.drop(columns=drop_cols, errors='ignore')
 
     # 4. 표 출력
+    show_segment_heatmap(group_means, segment_cols_filtered, midcats)
     st.markdown("#### 세그먼트별 중분류 만족도 (평균 및 전체편차 포함)")
     st.dataframe(table_with_stats, use_container_width=True)
 # ─────────────────────────────────────────────────────
