@@ -48,6 +48,7 @@ def plot_age_histogram_with_labels(df, question):
     )
 
     table_df = pd.DataFrame({'응답 수': grouped, '비율 (%)': percent}).T
+    
     return fig, table_df
 
 # ─────────────────────────────────────────────────────
@@ -87,7 +88,7 @@ def plot_bq2_bar(df, question):
         index=["응답 수", "비율 (%)"],
         columns=wrapped_labels
     )
-
+    fig.update_layout(title=None)
     return fig, table_df
 
 # ─────────────────────────────────────────────────────
@@ -120,7 +121,7 @@ def plot_sq4_custom_bar(df, question):
         index=["응답 수", "비율 (%)"],
         columns=display_labels
     )
-
+    fig.update_layout(title=None)
     return fig, table_df
 
 
@@ -162,7 +163,7 @@ def plot_categorical_stacked_bar(df, question):
             xanchor='center', x=0.5,
             traceorder='reversed'
         ),
-        title=dict(text=question, font=dict(size=16)),
+        title=dict(text=question, font=dict(size=26)),
         yaxis=dict(showticklabels=False),
         height=250, margin=dict(t=40, b=100)
     )
@@ -173,6 +174,7 @@ def plot_categorical_stacked_bar(df, question):
         index=["응답 수", "비율 (%)"],
         columns=display_labels
     )
+    fig.update_layout(title=None)
 
     return fig, table_df
 
