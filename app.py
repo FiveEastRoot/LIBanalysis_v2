@@ -1137,7 +1137,30 @@ def page_segment_analysis(df):
         showlegend=True,
         height=500
     )
+def show_segment_heatmap(group_means, segment_cols, midcats):
+    # 세그먼트 조합(행) 라벨링
+    def row_label(row):
+        # 세그먼트 컬럼 여러개면 줄바꿈 없이 |로 구분
+        return " | ".join([f"{col}:{row[col]}" for col in segment_cols])
 
+    # index: 세그먼트 조합 라벨, columns: 중분류, values: 점수
+    heatmap_df = group_means.copy()
+    heatmap_df["조합"] = heatmap_df.apply(row_label, axis=1)
+    heatmap_plot = heatmap_df.set_index("조합")[midcats]
+
+    fig = px.imshow(
+        heatmap_plot,
+        text_auto=True,
+        aspect="auto",
+        color_continuous_scale="RdYlBu_r",  # 높은 점수가 파랑, 낮은 점수는 빨강
+        range_color=[50, 100],
+        labels=dict(x="중분류", y="세그먼트 조합", color="평균점수"),
+        title="세그먼트별 중분류 만족도 히트맵"
+    )
+    fig.update_layout(height=300 + 24*len(heatmap_plot), yaxis_nticks=min(len(heatmap_plot), 30))
+
+    st.plotly_chart(fig, use_container_width=True)
+    show_segment_heatmap(group_means, segment_cols_filtered, midcats)
  # 1. 각 세그먼트별 중분류별 평균점수 집계 (group_means DataFrame)
     midcats = list(MIDCAT_MAP.keys())
     group_means = []
