@@ -135,7 +135,7 @@ def plot_bq2_bar(df, question):
     ))
     y_max = counts.max() + 20
     fig.update_layout(
-        title=dict(text=question, font=dict(size=20)),
+        title=dict(text=question, font=dict(size=16)),
         yaxis=dict(title="응답 수", range=[0, y_max]),
         height=450,
         margin=dict(t=50, b=100),
@@ -172,7 +172,7 @@ def plot_sq4_custom_bar(df, question):
     fig.update_layout(
         barmode='stack', showlegend=True,
         legend=dict(orientation='h', y=-0.5, x=0.5, xanchor='center', traceorder='reversed'),
-        title=dict(text=question, font=dict(size=20)),
+        title=dict(text=question, font=dict(size=16)),
         yaxis=dict(showticklabels=False),
         height=250, margin=dict(t=40, b=100)
     )
@@ -220,7 +220,7 @@ def plot_categorical_stacked_bar(df, question):
             xanchor='center', x=0.5,
             traceorder='reversed'
         ),
-        title=dict(text=question, font=dict(size=20)),
+        title=dict(text=question, font=dict(size=16)),
         yaxis=dict(showticklabels=False),
         height=250, margin=dict(t=40, b=100)
     )
@@ -610,23 +610,6 @@ def plot_dq3(df):
     # 기존 범주형 누적 스택 바 + 대응 테이블(DataFrame)
     bar, table_df = plot_categorical_stacked_bar(df[[question]].dropna().astype(str), question)
 
-    # (선택) go.Table 형태로 보여주고 싶다면 아래처럼 만든다. 
-    # render_chart_and_table에 DataFrame만 넘겨도 되면 이 블록은 없어도 된다.
-    table_fig = go.Figure(go.Table(
-        header=dict(
-            values=["항목", "응답 수", "비율 (%)"],
-            align='center', font=dict(size=11), height=30
-        ),
-        cells=dict(
-            values=[
-                table_df.columns.tolist(),
-                table_df.loc["응답 수"].tolist(),
-                table_df.loc["비율 (%)"].tolist()
-            ],
-            align='center', font=dict(size=10), height=28
-        )
-    ))
-    table_fig.update_layout(height=250, margin=dict(t=10, b=5))
 
     # 기본적으로 bar + DataFrame을 반환. 필요하면 table_fig로 바꿔도 된다.
     return bar, table_df, question
