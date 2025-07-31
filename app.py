@@ -827,163 +827,151 @@ def page_short_keyword(df):
 # ─────────────────────────────────────────────────────
 # 실행 엔트리
 # ─────────────────────────────────────────────────────
-# ─────────────────────────────────────────────────────
-# 상단에 mode 선택 추가 (사이드 탭 역할)
-mode = st.sidebar.radio("분석 모드", ["기본 분석", "심화 분석"])
-
-# 기존 메인 탭 이름 정의 (심화 분석 탭은 별도 처리)
-base_tab_names = [
-    "👤 응답자 정보",
-    "📈 만족도 기본 시각화",
-    "🗺️ 자치구 구성 문항",
-    "📊도서관 이용양태 분석",
-    "🖼️ 도서관 이미지 분석",
-    "🏋️ 도서관 강약점 분석",
-]
-expert_tab_name = [
-    "공통 심화 분석(전체)"
-]
-
-if mode == "기본 분석":
-    # 심화 분석 탭 제외
-    base_tab_names = st.tabs(base_tab_names)
-elif mode == "심화 분석":
-    # 기존 탭에 '공통 심화 분석(전체)' 추가, 기존 심화 분석("🔍 심화 분석")은 제거된 상태로
-    base_tab_names = st.tabs(expert_tab_name)
-
+# 페이지 설정은 가장 위에 한 번만
 st.set_page_config(
     page_title="공공도서관 설문 시각화 대시보드",
     layout="wide"
 )
 
+# 사이드바 모드 선택
+mode = st.sidebar.radio("분석 모드", ["기본 분석", "심화 분석"])
+
+# 업로드 처리
 uploaded = st.file_uploader("📂 엑셀(.xlsx) 파일 업로드", type=["xlsx"])
 if not uploaded:
     st.info("데이터 파일을 업로드해 주세요.")
     st.stop()
 
-df = pd.read_excel(uploaded)
-st.success("✅ 업로드 완료")
+try:
+    df = pd.read_excel(uploaded)
+    st.success("✅ 업로드 완료")
+except Exception as e:
+    st.error(f"파일 읽기 실패: {e}")
+    st.stop()
 
-
-with base_tab_names[0]:
-    page_home(df)
-
-with base_tab_names[1]:
-    page_basic_vis(df)
-
-with base_tab_names[2]:
-    st.header("🗺️ 자치구 구성 문항 분석")
-    sub_tabs = st.tabs([
-        "7점 척도 시각화",
-        "단문 응답 분석",
-        "장문 서술형 분석"
+# 모드별로 탭/내용 분리
+if mode == "기본 분석":
+    tabs = st.tabs([
+        "👤 응답자 정보",
+        "📈 만족도 기본 시각화",
+        "🗺️ 자치구 구성 문항",
+        "📊 도서관 이용양태 분석",
+        "🖼️ 도서관 이미지 분석",
+        "🏋️ 도서관 강약점 분석",
     ])
 
-    with sub_tabs[0]:
-        st.subheader("자치구 구성 문항 (7점 척도)")
-        subregion_cols = [c for c in df.columns if "Q9-D-" in c]
-        if not subregion_cols:
-            st.error("Q9-D- 로 시작하는 문항을 찾을 수 없습니다.")
+    with tabs[0]:
+        page_home(df)
+
+    with tabs[1]:
+        page_basic_vis(df)
+
+    with tabs[2]:
+        st.header("🗺️ 자치구 구성 문항 분석")
+        sub_tabs = st.tabs([
+            "7점 척도 시각화",
+            "단문 응답 분석",
+            "장문 서술형 분석"
+        ])
+        with sub_tabs[0]:
+            st.subheader("자치구 구성 문항 (7점 척도)")
+            subregion_cols = [c for c in df.columns if "Q9-D-" in c]
+            if not subregion_cols:
+                st.error("Q9-D- 로 시작하는 문항을 찾을 수 없습니다.")
+            else:
+                for idx, col in enumerate(subregion_cols):
+                    bar, tbl = plot_stacked_bar_with_table(df, col)
+                    st.markdown(f"##### {col}")
+                    render_chart_and_table(bar, tbl, col, key_prefix=f"subregion-{idx}")
+        with sub_tabs[1]:
+            page_short_keyword(df)
+        with sub_tabs[2]:
+            st.subheader("장문 서술형 분석 (Q9-DS-5)")
+            long_cols = [c for c in df.columns if "Q9-DS-5" in c]
+            if not long_cols:
+                st.warning("Q9-DS-5 관련 문항을 찾을 수 없습니다.")
+            else:
+                answers = df[long_cols[0]].dropna().astype(str).tolist()
+                df_long = process_answers(answers)
+                show_short_answer_keyword_analysis(df_long)
+
+    with tabs[3]:
+        st.header("📊 도서관 이용양태 분석")
+        sub_tabs = st.tabs(["DQ1~5", "DQ6 계열"])
+        with sub_tabs[0]:
+            fig1, tbl1, q1 = plot_dq1(df)
+            render_chart_and_table(fig1, tbl1, q1, key_prefix="dq1")
+
+            fig2, tbl2, q2 = plot_dq2(df)
+            render_chart_and_table(fig2, tbl2, q2, key_prefix="dq2")
+
+            fig3, tbl3, q3 = plot_dq3(df)
+            render_chart_and_table(fig3, tbl3, q3, key_prefix="dq3")
+
+            fig4, tbl4, q4 = plot_dq4_bar(df)
+            render_chart_and_table(fig4, tbl4, q4, key_prefix="dq4")
+
+            fig5, tbl5, q5 = plot_dq5(df)
+            render_chart_and_table(fig5, tbl5, q5, key_prefix="dq5")
+        with sub_tabs[1]:
+            st.subheader("DQ6 계열 문항 분석")
+            dq6_cols = [c for c in df.columns if c.startswith("DQ6")]
+            if not dq6_cols:
+                st.warning("DQ6 계열 문항이 없습니다.")
+            else:
+                for col in dq6_cols:
+                    st.markdown(f"### {col}")
+                    if col == dq6_cols[0]:
+                        multi = df[col].dropna().astype(str).str.split(',')
+                        exploded = multi.explode().str.strip()
+                        counts = exploded.value_counts()
+                        percent = (counts / counts.sum() * 100).round(1)
+
+                        fig = go.Figure(go.Bar(
+                            x=counts.values, y=counts.index,
+                            orientation='h', text=counts.values,
+                            textposition='outside', marker_color=get_qualitative_colors(len(counts))
+                        ))
+                        fig.update_layout(
+                            title=col,
+                            xaxis_title="응답 수",
+                            yaxis_title="서비스",
+                            height=400,
+                            margin=dict(t=50, b=100)
+                        )
+                        table_df = pd.DataFrame({
+                            '응답 수': counts,
+                            '비율 (%)': percent
+                        }).T
+                        render_chart_and_table(fig, table_df, col, key_prefix="dq6")
+                    else:
+                        bar, tbl = plot_categorical_stacked_bar(df, col)
+                        render_chart_and_table(bar, tbl, col, key_prefix="dq6")
+
+    with tabs[4]:
+        st.header("🖼️ 도서관 이미지 분석")
+        fig, tbl = plot_likert_diverging(df, prefix="DQ7-E")
+        if fig is not None:
+            render_chart_and_table(fig, tbl, "DQ7-E 이미지 분포", key_prefix="image-diverge")
         else:
-            for idx, col in enumerate(subregion_cols):
-                bar, tbl = plot_stacked_bar_with_table(df, col)
-                st.markdown(f"##### {col}")
-                render_chart_and_table(bar, tbl, col, key_prefix=f"subregion-{idx}")
+            st.warning("DQ7-E 문항이 없습니다.")
 
-    with sub_tabs[1]:
-        page_short_keyword(df)
-
-    with sub_tabs[2]:
-        st.subheader("장문 서술형 분석 (Q9-DS-5)")
-        long_cols = [c for c in df.columns if "Q9-DS-5" in c]
-        if not long_cols:
-            st.warning("Q9-DS-5 관련 문항을 찾을 수 없습니다.")
+    with tabs[5]:
+        st.header("🏋️ 도서관 강약점 분석")
+        fig8, tbl8, q8 = plot_pair_bar(df, "DQ8")
+        if fig8 is not None:
+            render_chart_and_table(fig8, tbl8, q8, key_prefix="strength")
         else:
-            answers = df[long_cols[0]].dropna().astype(str).tolist()
-            df_long = process_answers(answers)
-            show_short_answer_keyword_analysis(df_long)
-
-with base_tab_names[3]:
-    st.header("📊 도서관 이용양태 분석")
-    sub_tabs = st.tabs(["DQ1~5", "DQ6 계열"])
-
-    with sub_tabs[0]:
-        fig1, tbl1, q1 = plot_dq1(df)
-        render_chart_and_table(fig1, tbl1, q1, key_prefix="dq1")
-
-        fig2, tbl2, q2 = plot_dq2(df)
-        render_chart_and_table(fig2, tbl2, q2, key_prefix="dq2")
-
-        fig3, tbl3, q3 = plot_dq3(df)
-        render_chart_and_table(fig3, tbl3, q3, key_prefix="dq3")
-
-        fig4, tbl4, q4 = plot_dq4_bar(df)
-        render_chart_and_table(fig4, tbl4, q4, key_prefix="dq4")
-
-        fig5, tbl5, q5 = plot_dq5(df)
-        render_chart_and_table(fig5, tbl5, q5, key_prefix="dq5")
-
-    with sub_tabs[1]:
-        st.subheader("DQ6 계열 문항 분석")
-        dq6_cols = [c for c in df.columns if c.startswith("DQ6")]
-        if not dq6_cols:
-            st.warning("DQ6 계열 문항이 없습니다.")
+            st.warning("DQ8 문항이 없습니다.")
+        fig9, tbl9, q9 = plot_pair_bar(df, "DQ9")
+        if fig9 is not None:
+            render_chart_and_table(fig9, tbl9, q9, key_prefix="weakness")
         else:
-            for col in dq6_cols:
-                st.markdown(f"### {col}")
-                if col == dq6_cols[0]:
-                    # 기존 방식: 1순위 항목을 explode해서 계산한 뒤 DataFrame으로 정리
-                    multi = df[col].dropna().astype(str).str.split(',')
-                    exploded = multi.explode().str.strip()
-                    counts = exploded.value_counts()
-                    percent = (counts / counts.sum() * 100).round(1)
+            st.warning("DQ9 문항이 없습니다.")
 
-                    fig = go.Figure(go.Bar(
-                        x=counts.values, y=counts.index,
-                        orientation='h', text=counts.values,
-                        textposition='outside', marker_color=get_qualitative_colors(len(counts))
-                    ))
-                    fig.update_layout(
-                        title=col,
-                        xaxis_title="응답 수",
-                        yaxis_title="서비스",
-                        height=400,
-                        margin=dict(t=50, b=100)
-                    )
-                    table_df = pd.DataFrame({
-                        '응답 수': counts,
-                        '비율 (%)': percent
-                    }).T
-                    render_chart_and_table(fig, table_df, col, key_prefix="dq6")
-                else:
-                    bar, tbl = plot_categorical_stacked_bar(df, col)
-                    render_chart_and_table(bar, tbl, col, key_prefix="dq6")
-
-with base_tab_names[4]:
-    st.header("🖼️ 도서관 이미지 분석")
-    fig, tbl = plot_likert_diverging(df, prefix="DQ7-E")
-    if fig is not None:
-        render_chart_and_table(fig, tbl, "DQ7-E 이미지 분포", key_prefix="image-diverge")
-    else:
-        st.warning("DQ7-E 문항이 없습니다.")
-
-with base_tab_names[5]:
-    st.header("🏋️ 도서관 강약점 분석")
-    fig8, tbl8, q8 = plot_pair_bar(df, "DQ8")
-    if fig8 is not None:
-        render_chart_and_table(fig8, tbl8, q8, key_prefix="strength")
-    else:
-        st.warning("DQ8 문항이 없습니다.")
-    fig9, tbl9, q9 = plot_pair_bar(df, "DQ9")
-    if fig9 is not None:
-        render_chart_and_table(fig9, tbl9, q9, key_prefix="weakness")
-    else:
-        st.warning("DQ9 문항이 없습니다.")
-
-# 기존 base_tab_names[6]에 있었던 심화 분석 내용 재배치
-if mode == "심화 분석":
-    # "공통 심화 분석(전체)"은 base_tab_names 뒤에 붙은 마지막 탭
-    with expert_tab_name[0]:
+elif mode == "심화 분석":
+    tabs = st.tabs(["공통 심화 분석(전체)"])
+    with tabs[0]:
         st.header("🔍 공통 심화 분석(전체)")
         st.subheader("중분류별 전체 만족도 (레이더 차트 및 평균값)")
         radar = plot_midcategory_radar(df)
