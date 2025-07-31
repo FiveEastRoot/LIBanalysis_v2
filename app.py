@@ -936,8 +936,11 @@ with main_tabs[3]:
         fig2, tbl2, q2 = plot_dq2(df)
         if fig2: st.subheader(q2); st.plotly_chart(fig2, use_container_width=True); st.plotly_chart(tbl2, use_container_width=True)
         fig3, tbl3, q3 = plot_dq3(df)
-        if fig3: st.subheader(q3); st.plotly_chart(fig3, use_container_width=True); st.plotly_chart(tbl3, use_container_width=True)
-        fig4, tbl4, q4 = plot_dq4_bar(df)
+        if fig3:
+            st.subheader(q3)
+            st.plotly_chart(fig3, use_container_width=True)
+            st.dataframe(tbl3)        
+            fig4, tbl4, q4 = plot_dq4_bar(df)
         if fig4: st.subheader(q4); st.plotly_chart(fig4, use_container_width=True); st.plotly_chart(tbl4, use_container_width=True)
         fig5, tbl5, q5 = plot_dq5(df)
         if fig5: st.subheader(q5); st.plotly_chart(fig5, use_container_width=True); st.plotly_chart(tbl5, use_container_width=True)
