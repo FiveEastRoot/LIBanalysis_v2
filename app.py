@@ -1065,7 +1065,7 @@ def page_segment_analysis(df):
     st.header("🧩 이용자 세그먼트 조합 분석")
     st.markdown("""
     - SQ1~5, DQ1, DQ2, DQ4(1순위) 중 **최대 3개** 문항 선택  
-    - 선택한 보기 조합별(응답자 5명 이상)로 Q1~Q6, Q9-D-3 중분류별 만족도 평균을 **히트맵**으로 비교
+    - 선택한 보기 조합별(응답자 5명 이상)로 Q1~Q6, Q9-D-3, 공익성/기여도(Q7,Q8) 중분류별 만족도 평균을 **히트맵**으로 비교
     """)
 
     seg_labels = [o["label"] for o in SEGMENT_OPTIONS]
@@ -1087,7 +1087,7 @@ def page_segment_analysis(df):
         st.warning("선택한 세그먼트 조건에 해당하는 컬럼이 없습니다.")
         return
 
-    # 분석 대상: Q1~Q6, Q9-D-3 중분류 관련 컬럼만 추출
+    # 분석 대상: Q1~Q6, Q9-D-3, 공익성/기여도(Q7,Q8)
     midcat_prefixes = list(MIDCAT_MAP.values())
     analysis_cols = []
     for p in midcat_prefixes:
@@ -1113,11 +1113,9 @@ def page_segment_analysis(df):
     group_means = []
 
     for idx, row in counts.iterrows():
-        # 1. 세그먼트 키 추출 (groupby와 순서 일치해야 함)
         key = tuple(row[c] for c in segment_cols)
-        gdf = group.get_group(key)   # 반드시 루프 안에서 선언!
+        gdf = group.get_group(key)
         means = {}
-
         for cat, prefix in MIDCAT_MAP.items():
             if isinstance(prefix, list):
                 cols = []
@@ -1137,30 +1135,34 @@ def page_segment_analysis(df):
 
     group_means = pd.DataFrame(group_means)
 
-    # 2. 행별 평균, 전체평균 대비 편차 추가
-    midcats = list(MIDCAT_MAP.keys())
-    group_means["중분류평균"] = group_means[midcats].mean(axis=1).round(2)
-    overall_means = group_means[midcats].mean(axis=0)
-    overall_mean_of_means = overall_means.mean()
-    group_means["전체평균대비편차"] = (group_means["중분류평균"] - overall_mean_of_means).round(2)
-
-   # 1. 세그먼트 컬럼 중 숫자 컬럼 제거(SQ2, DQ2_YEARS 등)
+    # 2. 숫자 세그먼트 컬럼 제거(나이 등, SQ2, DQ2_YEARS 등)
     segment_cols_filtered = [
         c for c in segment_cols
         if not (c.startswith("SQ2") and "GROUP" not in c) and c != "DQ2_YEARS"
     ]
 
-    # 2. 통합 표 컬럼 정의 (세그먼트+중분류+평균+편차+응답자수)
+    # 3. 응답자수 merge
+    merge_keys = segment_cols_filtered
+    counts_merge = counts[merge_keys + ["응답자수"]]
+    group_means = pd.merge(group_means, counts_merge, how='left', on=merge_keys)
+
+    # 4. 중분류평균/전체평균대비편차 추가
+    group_means["중분류평균"] = group_means[midcats].mean(axis=1).round(2)
+    overall_means = group_means[midcats].mean(axis=0)
+    overall_mean_of_means = overall_means.mean()
+    group_means["전체평균대비편차"] = (group_means["중분류평균"] - overall_mean_of_means).round(2)
+
+    # 5. 표 컬럼 순서
     table_cols = segment_cols_filtered + midcats + ["중분류평균", "전체평균대비편차", "응답자수"]
     table_with_stats = group_means[table_cols]
 
-    # 3. 히트맵 세로축 라벨: 문항명 없이 응답만 나열 (filtered 사용)
+    # 6. 히트맵 세로축 라벨: 응답만 나열
     def row_label(row):
         return " | ".join([str(row[col]) for col in segment_cols_filtered])
     group_means["조합"] = group_means.apply(row_label, axis=1)
     heatmap_plot = group_means.set_index("조합")[midcats]
 
-    # 4. 히트맵 시각화
+    # 7. 히트맵 시각화
     fig = px.imshow(
         heatmap_plot,
         text_auto=True,
@@ -1173,28 +1175,9 @@ def page_segment_analysis(df):
     fig.update_layout(height=300 + 24*len(heatmap_plot), yaxis_nticks=min(len(heatmap_plot), 30))
     st.plotly_chart(fig, use_container_width=True)
 
-    # 5. 통합 표 한 번에 출력
+    # 8. 통합 표 한 번에 출력
     st.markdown("#### 세그먼트 조합별 중분류별 만족도 및 응답자수")
     st.dataframe(table_with_stats, use_container_width=True)
-
-# ---- 히트맵 그리기 함수 분리 ----
-def show_segment_heatmap(group_means, segment_cols, midcats):
-    def row_label(row):
-        return " | ".join([str(row[col]) for col in segment_cols])
-    heatmap_df = group_means.copy()
-    heatmap_df["조합"] = heatmap_df.apply(row_label, axis=1)
-    heatmap_plot = heatmap_df.set_index("조합")[midcats]
-    fig = px.imshow(
-        heatmap_plot,
-        text_auto=True,
-        aspect="auto",
-        color_continuous_scale="RdYlBu_r",
-        range_color=[50, 100],
-        labels=dict(x="중분류", y="세그먼트 조합", color="평균점수"),
-        title="세그먼트별 중분류 만족도 히트맵"
-    )
-    fig.update_layout(height=300 + 24*len(heatmap_plot), yaxis_nticks=min(len(heatmap_plot), 30))
-    st.plotly_chart(fig, use_container_width=True)
 
 
 # ─────────────────────────────────────────────────────
