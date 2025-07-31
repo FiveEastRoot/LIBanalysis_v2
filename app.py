@@ -1185,62 +1185,6 @@ def page_segment_analysis(df):
     fig.update_layout(height=300 + 24*len(heatmap_plot), yaxis_nticks=min(len(heatmap_plot), 30))
     st.plotly_chart(fig, use_container_width=True)
 
-    # --- 추가 시각화 1: 전체 평균 대비 편차 정렬 막대 ---
-    st.markdown("### 전체 평균 대비 편차 정렬 (세그먼트 조합별)")
-    deviation_df = group_means[[*segment_cols_filtered, "전체평균대비편차", "응답자수"]].copy()
-    # 조합 라벨
-    deviation_df["조합"] = deviation_df.apply(lambda r: " | ".join([str(r[c]) for c in segment_cols_filtered]), axis=1)
-    deviation_df_sorted = deviation_df.sort_values("전체평균대비편차", ascending=False).reset_index(drop=True)
-
-    fig_dev = go.Figure()
-    fig_dev.add_trace(go.Bar(
-        x=deviation_df_sorted["전체평균대비편차"],
-        y=deviation_df_sorted["조합"],
-        orientation="h",
-        text=deviation_df_sorted["응답자수"].apply(lambda x: f"n={x}"),
-        hovertemplate="<b>%{y}</b><br>편차: %{x}<br>응답자수: %{text}<extra></extra>",
-        marker=dict(
-            color=deviation_df_sorted["전체평균대비편차"],
-            colorscale="RdYlBu",
-            cmin=-max(abs(deviation_df_sorted["전체평균대비편차"])),
-            cmax= max(abs(deviation_df_sorted["전체평균대비편차"])),
-            showscale=True,
-        )
-    ))
-    fig_dev.update_layout(
-        title="세그먼트 조합별 전체 평균 대비 편차 (내림차순)",
-        xaxis_title="전체 평균 대비 편차",
-        height= max(400, 30 * len(deviation_df_sorted)),
-        margin=dict(l=250, t=40, b=40)
-    )
-    st.plotly_chart(fig_dev, use_container_width=True)
-
-    # --- 추가 시각화 2: 응답자 수 대비 편차 산점도 ---
-    st.markdown("### 응답자 수 대비 전체 평균 대비 편차 (신뢰도 감안)")
-    scatter_df = deviation_df_sorted.copy()
-    scatter_df["순번"] = range(len(scatter_df))
-    fig_scatter = go.Figure()
-    fig_scatter.add_trace(go.Scatter(
-        x=scatter_df["전체평균대비편차"],
-        y=scatter_df["순번"],
-        mode="markers",
-        marker=dict(
-            size=scatter_df["응답자수"].apply(lambda x: min(50, 5 + x**0.5)),  # 과도하지 않게 scale
-            sizemode="area",
-            color=scatter_df["중분류평균"] if "중분류평균" in scatter_df else scatter_df["전체평균대비편차"],
-            showscale=True
-        ),
-        text=scatter_df["조합"],
-        hovertemplate="<b>%{text}</b><br>편차: %{x}<br>응답자수: %{marker.size}<extra></extra>"
-    ))
-    fig_scatter.update_layout(
-        title="응답자 수(점 크기) 대비 전체 평균 대비 편차",
-        xaxis_title="전체 평균 대비 편차",
-        yaxis=dict(visible=False),
-        height=350,
-        margin=dict(t=40, b=20)
-    )
-    st.plotly_chart(fig_scatter, use_container_width=True)
 
     # --- 추가 시각화 3: 상위 N개 세그먼트 조합 레이더 (중분류 프로파일) ---
     st.markdown("### 응답자 수 기준 상위 5개 세그먼트 조합의 중분류 만족도 프로파일 비교")
