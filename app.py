@@ -1064,7 +1064,7 @@ def page_segment_analysis(df):
     st.header("🧩 이용자 세그먼트 조합 분석")
     st.markdown("""
     - SQ1~5, DQ1, DQ2, DQ4(1순위) 중 **최대 3개** 문항 선택  
-    - 선택한 보기 조합별(응답자 5명 이상)로 Q1~Q6, Q9-D-3 중분류별 만족도 평균을 **레이더 차트**로 비교
+    - 선택한 보기 조합별(응답자 5명 이상)로 Q1~Q6, Q9-D-3 중분류별 만족도 평균을 **히트맵**으로 비교
     """)
 
     seg_labels = [o["label"] for o in SEGMENT_OPTIONS]
@@ -1074,7 +1074,6 @@ def page_segment_analysis(df):
         return
     selected_keys = [o["key"] for o in SEGMENT_OPTIONS if o["label"] in sel]
 
-    # 전처리 (파생 컬럼 자동 추가)
     df2 = add_derived_columns(df)
 
     # 동적으로 실제 컬럼 추출(복수 선택 시 모두 사용)
@@ -1094,9 +1093,8 @@ def page_segment_analysis(df):
         analysis_cols.extend([c for c in df2.columns if c.startswith(p)])
     analysis_cols = list(dict.fromkeys(analysis_cols))
 
-    # 세그먼트+분석 대상만 남김
     seg_df = df2[segment_cols + analysis_cols].copy()
-    seg_df = seg_df.dropna(subset=segment_cols, how='any')  # 필수조건
+    seg_df = seg_df.dropna(subset=segment_cols, how='any')
     for c in segment_cols:
         seg_df[c] = seg_df[c].astype(str)
 
@@ -1107,64 +1105,9 @@ def page_segment_analysis(df):
         st.warning("응답자 5명 이상인 세그먼트 조합이 없습니다.")
         return
 
-    # 레이더차트
-    midcats = list(MIDCAT_MAP.keys())
-    fig = go.Figure()
-    color_cycle = cycle(px.colors.qualitative.Plotly)
-    for idx, row in counts.iterrows():
-        key = tuple(row[c] for c in segment_cols)
-        gdf = group.get_group(key)
-        means = []
-        for cat, prefix in MIDCAT_MAP.items():
-            cols = [c for c in gdf.columns if c.startswith(prefix)]
-            if not cols:
-                means.append(None)
-                continue
-            vals = gdf[cols].apply(pd.to_numeric, errors="coerce")
-            mean_val = 100 * (vals.mean(axis=1, skipna=True) - 1) / 6
-            means.append(round(mean_val.mean(), 2))
-        label = "<br>".join([f"{c}:{row[c]}" for c in segment_cols])
-        fig.add_trace(go.Scatterpolar(
-            r=means+[means[0]],
-            theta=midcats+[midcats[0]],
-            name=label,
-            line=dict(color=next(color_cycle)),
-            fill=None
-        ))
-    fig.update_layout(
-        polar=dict(radialaxis=dict(range=[50, 100])),
-        title="세그먼트별 중분류 만족도 비교 (응답자수 ≥ 5)",
-        showlegend=True,
-        height=500
-    )
-def show_segment_heatmap(group_means, segment_cols, midcats):
-    # 세그먼트 조합(행) 라벨링
-    def row_label(row):
-        # 세그먼트 컬럼 여러개면 줄바꿈 없이 |로 구분
-        return " | ".join([f"{col}:{row[col]}" for col in segment_cols])
-
-    # index: 세그먼트 조합 라벨, columns: 중분류, values: 점수
-    heatmap_df = group_means.copy()
-    heatmap_df["조합"] = heatmap_df.apply(row_label, axis=1)
-    heatmap_plot = heatmap_df.set_index("조합")[midcats]
-
-    fig = px.imshow(
-        heatmap_plot,
-        text_auto=True,
-        aspect="auto",
-        color_continuous_scale="RdYlBu_r",  # 높은 점수가 파랑, 낮은 점수는 빨강
-        range_color=[50, 100],
-        labels=dict(x="중분류", y="세그먼트 조합", color="평균점수"),
-        title="세그먼트별 중분류 만족도 히트맵"
-    )
-    fig.update_layout(height=300 + 24*len(heatmap_plot), yaxis_nticks=min(len(heatmap_plot), 30))
-
-    st.plotly_chart(fig, use_container_width=True)
-    
- # 1. 각 세그먼트별 중분류별 평균점수 집계 (group_means DataFrame)
+    # 1. 세그먼트별 중분류별 평균점수 집계
     midcats = list(MIDCAT_MAP.keys())
     group_means = []
-
     for idx, row in counts.iterrows():
         key = tuple(row[c] for c in segment_cols)
         gdf = group.get_group(key)
@@ -1177,12 +1120,10 @@ def show_segment_heatmap(group_means, segment_cols, midcats):
             vals = gdf[cols].apply(pd.to_numeric, errors="coerce")
             mean_val = 100 * (vals.mean(axis=1, skipna=True) - 1) / 6
             means[cat] = round(mean_val.mean(), 2)
-        # 세그먼트 키 정보와 함께 저장
         seg_info = {col: row[col] for col in segment_cols}
         seg_info.update(means)
         group_means.append(seg_info)
-
-    group_means = pd.DataFrame(group_means) 
+    group_means = pd.DataFrame(group_means)
 
     # 2. 행별 중분류 평균, 전체평균대비편차 추가
     group_means["중분류평균"] = group_means[midcats].mean(axis=1).round(2)
@@ -1190,32 +1131,50 @@ def show_segment_heatmap(group_means, segment_cols, midcats):
     overall_mean_of_means = overall_means.mean()
     group_means["전체평균대비편차"] = (group_means["중분류평균"] - overall_mean_of_means).round(2)
 
-    # 3. 표 컬럼 순서 정렬
-    table_cols = segment_cols + midcats + ["중분류평균", "전체평균대비편차"]
-    table_with_stats = group_means[table_cols]
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    # 1. segment_cols 내 숫자 컬럼 제거
+    # 3. 숫자 세그먼트 컬럼 제거(나이 등)
     segment_cols_filtered = [
         c for c in segment_cols
         if not (c.startswith("SQ2") and "GROUP" not in c) and c != "DQ2_YEARS"
     ]
-
-    # 2. 표 컬럼 순서 정렬
     table_cols = segment_cols_filtered + midcats + ["중분류평균", "전체평균대비편차"]
     table_with_stats = group_means[table_cols]
 
-    # 3. 응답자수 표도 동일하게 제거
+    # 4. 히트맵 시각화
+    show_segment_heatmap(group_means, segment_cols_filtered, midcats)
+
+    # 5. 표
+    st.markdown("#### 세그먼트별 중분류 만족도 (평균 및 전체편차 포함)")
+    st.dataframe(table_with_stats, use_container_width=True)
+
+    # 6. 응답자수 표 (필요시)
     drop_cols = [c for c in counts.columns if (
         c.startswith("SQ2") and "GROUP" not in c
     ) or (c == "DQ2_YEARS")]
     counts_for_display = counts.drop(columns=drop_cols, errors='ignore')
+    st.markdown("#### 세그먼트 조합별 응답자 수")
+    st.dataframe(counts_for_display, use_container_width=True)
 
-    # 4. 표 출력
-    show_segment_heatmap(group_means, segment_cols_filtered, midcats)
-    st.markdown("#### 세그먼트별 중분류 만족도 (평균 및 전체편차 포함)")
-    st.dataframe(table_with_stats, use_container_width=True)
+
+# ---- 히트맵 그리기 함수 분리 ----
+def show_segment_heatmap(group_means, segment_cols, midcats):
+    def row_label(row):
+        return " | ".join([f"{col}:{row[col]}" for col in segment_cols])
+    heatmap_df = group_means.copy()
+    heatmap_df["조합"] = heatmap_df.apply(row_label, axis=1)
+    heatmap_plot = heatmap_df.set_index("조합")[midcats]
+    fig = px.imshow(
+        heatmap_plot,
+        text_auto=True,
+        aspect="auto",
+        color_continuous_scale="RdYlBu_r",
+        range_color=[50, 100],
+        labels=dict(x="중분류", y="세그먼트 조합", color="평균점수"),
+        title="세그먼트별 중분류 만족도 히트맵"
+    )
+    fig.update_layout(height=300 + 24*len(heatmap_plot), yaxis_nticks=min(len(heatmap_plot), 30))
+    st.plotly_chart(fig, use_container_width=True)
+
+
 # ─────────────────────────────────────────────────────
 # 실행 엔트리
 # ─────────────────────────────────────────────────────
