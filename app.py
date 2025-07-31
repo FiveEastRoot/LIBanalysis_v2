@@ -1378,7 +1378,7 @@ def show_basic_strategy_insights(df):
                 fill=None,
                 name="전체 평균",
                 line=dict(dash='dash', width=2),
-                opacity=0.8
+                opacity=1
             ))
 
             colors = px.colors.qualitative.Plotly
@@ -1395,7 +1395,7 @@ def show_basic_strategy_insights(df):
                     name=f"{purpose} (n={int(purpose_counts[purpose])})",
                     hovertemplate="%{theta}: %{r:.1f}<extra></extra>",
                     marker=dict(color=colors[i % len(colors)]),
-                    opacity=0.6
+                    opacity=0.2
                 ))
 
             fig.update_layout(
