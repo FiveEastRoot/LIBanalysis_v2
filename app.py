@@ -1486,7 +1486,7 @@ def show_basic_strategy_insights(df):
             fig.update_traces(texttemplate="%{text:.1f}", textposition="outside")
             st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("5. 주로 이용 서비스(SQ5) × 운영시간 만족도 (기대 대비 시간 만족도)")
+    st.subheader("5. 주로 이용 서비스(SQ5)×운영시간 만족도 (기대 대비 시간 만족도)")
     time_sat_col = None
     for c in df.columns:
         if c.startswith("Q7-D-7"):
