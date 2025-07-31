@@ -1068,7 +1068,7 @@ with main_tabs[6]:
         st.plotly_chart(radar, use_container_width=True)
         tbl_avg = midcategory_avg_table(df)
         if not tbl_avg.empty:
-            show_table(tbl_avg, "중분류별 평균 점수", "midcategory_avg_scores")
+            show_table(tbl_avg, "중분류별 평균 점수")
             st.markdown("---")
         else:
             st.warning("중분류 평균을 계산할 수 없습니다.")
@@ -1088,9 +1088,8 @@ with main_tabs[6]:
             st.markdown(f"### {mid}")
             st.plotly_chart(fig, use_container_width=True)
             if table_df is not None:
-                show_table_with_download(
-                    table_df.reset_index().rename(columns={"index": "문항"}),
-                    f"{mid} 항목별 편차",
-                    f"{mid.replace(' ','_')}_within_item_variance"
-                )
+                show_table(
+    table_df.reset_index().rename(columns={"index": "문항"}),
+    f"{mid} 항목별 편차"
+)
                 st.markdown("---")
