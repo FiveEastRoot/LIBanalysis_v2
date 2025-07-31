@@ -1333,6 +1333,85 @@ def page_segment_analysis(df):
     st.markdown("#### 세그먼트 조합별 중분류별 만족도 및 응답자수")
     st.dataframe(table_with_stats, use_container_width=True)
 
+def show_basic_strategy_insights(df):
+    st.subheader("1. 이용 목적 × 전반 만족도 (중분류 기준 레이더)")
+    purpose_col = "DQ4_1ST"  # 실제 컬럼명에 맞게 조정
+    if purpose_col not in df.columns:
+        st.warning(f"{purpose_col} 컬럼이 없습니다.")
+    else:
+        purposes = df[purpose_col].dropna().astype(str).unique()
+        overall_mid_scores = compute_midcategory_scores(df)
+        midcats = list(overall_mid_scores.index)
+        for purpose in purposes:
+            subset = df[df[purpose_col].astype(str) == purpose]
+            if len(subset) < 5:
+                continue
+            purpose_scores = compute_midcategory_scores(subset)
+            vals = [purpose_scores.get(m, overall_mid_scores.get(m, 0)) for m in midcats]
+            overall_vals = [overall_mid_scores.get(m, 0) for m in midcats]
+            fig = go.Figure()
+            fig.add_trace(go.Scatterpolar(
+                r=vals + [vals[0]],
+                theta=midcats + [midcats[0]],
+                fill='toself',
+                name=f"{purpose}"
+            ))
+            fig.add_trace(go.Scatterpolar(
+                r=overall_vals + [overall_vals[0]],
+                theta=midcats + [midcats[0]],
+                fill=None,
+                name="전체 평균",
+                line=dict(dash='dash')
+            ))
+            fig.update_layout(
+                polar=dict(radialaxis=dict(range=[50, 100])),
+                title=f"이용 목적 '{purpose}' vs 전체 평균 중분류 만족도",
+                height=400,
+                showlegend=True
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+    st.subheader("2. 주이용서비스별 중분류 만족도")
+    service_col = "SQ5"  # 실제 주이용서비스 컬럼명으로 수정
+    if service_col in df.columns:
+        services = df[service_col].dropna().astype(str).unique()
+        overall_mid_scores = compute_midcategory_scores(df)
+        midcats = list(overall_mid_scores.index)
+        for service in services:
+            subset = df[df[service_col].astype(str) == service]
+            if len(subset) < 5:
+                continue
+            service_scores = compute_midcategory_scores(subset)
+            plot_df = pd.DataFrame({
+                "중분류": midcats,
+                "서비스별 평균": [service_scores.get(m, None) for m in midcats],
+                "전체 평균": [overall_mid_scores.get(m, None) for m in midcats]
+            })
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                x=plot_df["중분류"],
+                y=plot_df["서비스별 평균"],
+                name=service,
+                text=[f"{v:.1f}" if v is not None else "" for v in plot_df["서비스별 평균"]],
+                textposition="outside"
+            ))
+            fig.add_trace(go.Scatter(
+                x=plot_df["중분류"],
+                y=plot_df["전체 평균"],
+                mode="lines+markers",
+                name="전체 평균",
+                line=dict(dash="dash")
+            ))
+            fig.update_layout(
+                title=f"주이용서비스 '{service}' 별 중분류 만족도 vs 전체 평균",
+                yaxis_title="만족도 (0~100)",
+                barmode="group",
+                height=400
+            )
+            st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning(f"{service_col} 컬럼이 없습니다. 주이용서비스별 분석 불가.")
+
 
 # ─────────────────────────────────────────────────────
 # 실행 엔트리
@@ -1529,3 +1608,7 @@ elif mode == "심화 분석":
         st.dataframe(df_mean)
     with tabs[2]:
         page_segment_analysis(df)
+
+elif mode == "전략 인사이트(기본)":
+    st.header("🧠 전략 인사이트 (기본)")
+    show_basic_strategy_insights(df)
