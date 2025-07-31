@@ -1187,8 +1187,8 @@ def page_segment_analysis(df):
 
 
     # --- 추가 시각화 3: 상위 N개 세그먼트 조합 레이더 (중분류 프로파일) ---
-    st.markdown("### 응답자 수 기준 상위 5개 세그먼트 조합의 중분류 만족도 프로파일 비교")
-    top_n = 5
+    st.markdown("### 응답자 수 기준 상위 10개 세그먼트 조합의 중분류 만족도 프로파일 비교")
+    top_n = 10
     top_df = group_means.nlargest(top_n, "응답자수").copy()
     overall_mid_mean = overall_mean_of_means  # scalar
     midcats = list(MIDCAT_MAP.keys())
