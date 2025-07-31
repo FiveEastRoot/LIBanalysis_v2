@@ -959,10 +959,12 @@ COLOR_CYCLER = cycle(px.colors.qualitative.Plotly)
 
 # 2. 동적으로 실제 세그먼트 컬럼 리스트 반환
 def get_segment_columns(df, key):
-    if key == "SQ2":
-        if "SQ2_GROUP" in df.columns:
-            return ["SQ2_GROUP"]
-        return [col for col in df.columns if "SQ2" in col]
+    if key == "DQ2":
+        if "DQ2_YEARS_GROUP" in df.columns:
+            return ["DQ2_YEARS_GROUP"]
+        elif "DQ2_YEARS" in df.columns:
+            return ["DQ2_YEARS"]
+        return [col for col in df.columns if "DQ2" in col]
     elif key == "DQ4":
         return [col for col in df.columns if ("DQ4" in col) and ("1순위" in col)]
     elif key == "DQ1":
@@ -990,8 +992,8 @@ def add_derived_columns(df):
             bins = [0,12,24,48,72,144,1e10]
             labels = ["0~11회: 연 1회 미만", "12~23회: 월 1회", "24~47회: 월 2~4회", "48~71회: 주 1회", "72~143회: 주 2~3회", "144회 이상: 거의 매일"]
             df["DQ1_FREQ"] = pd.cut(yearly, bins=bins, labels=labels, right=False)
-    # DQ2: 이용기간 → 년수로 통일
-    if "DQ2_YEARS" not in df.columns:
+    # DQ2: 이용기간 → 년수로 통일 + 5년 단위 범주화
+    if "DQ2_YEARS" not in df.columns or "DQ2_YEARS_GROUP" not in df.columns:
         dq2_cols = [c for c in df.columns if "DQ2" in c]
         if dq2_cols:
             dq2_col = dq2_cols[0]
@@ -1006,11 +1008,32 @@ def add_derived_columns(df):
                 return None
             years = df[dq2_col].dropna().apply(parse_years)
             df["DQ2_YEARS"] = years
+
+        # 5년 단위 범주화
+        def year_group(y):
+            if pd.isna(y):
+                return None
+            y = int(y)
+            if y < 5:
+                return "1~4년"
+            elif y < 10:
+                return "5~9년"
+            elif y < 15:
+                return "10~14년"
+            elif y < 20:
+                return "15~19년"
+            else:
+                return "20년 이상"
+        df["DQ2_YEARS_GROUP"] = df["DQ2_YEARS"].apply(year_group)
+
+
+
     # DQ4: (1순위)만 파생
     if "DQ4_1ST" not in df.columns:
         dq4_cols = [c for c in df.columns if ("DQ4" in c) and ("1순위" in c)]
         if dq4_cols:
             df["DQ4_1ST"] = df[dq4_cols[0]]
+
     # SQ2: 5세 단위 범주화 (SQ2_GROUP)
     if "SQ2_GROUP" not in df.columns:
         sq2_cols = [c for c in df.columns if "SQ2" in c]
