@@ -817,26 +817,33 @@ def plot_within_category_bar(df, midcategory):
     item_scores = compute_within_category_item_scores(df)
     if midcategory not in item_scores:
         return None
-    series = item_scores[midcategory].sort_values(ascending=False)
+    # 원래 컬럼 순서 유지
+    predicate = MIDDLE_CATEGORY_MAPPING[midcategory]
+    orig_cols = [c for c in df.columns if predicate(c)]
+    series = item_scores[midcategory]
+    # reindex to original order if possible
+    series = series.reindex(orig_cols)
+    # 중분류 전체 평균
+    mid_scores = compute_midcategory_scores(df)
+    mid_mean = mid_scores.get(midcategory, None)
     fig = go.Figure(go.Bar(
-                x=series.values,
-                y=series.index,
-                orientation='h',
-                text=series.round(1),
-                textposition='outside',
-                marker_color='steelblue'
-            ))
-            # 중분류 전체 평균(아이템 평균들의 평균) 선 추가
-            mid_mean = mid_scores[mid]
-            fig.add_vline(x=mid_mean, line_dash="dash", line_color="red", annotation_text=f"중분류 평균 {mid_mean:.1f}", annotation_position="top right")
-            fig.update_layout(
-                title=f"{mid} 내 문항별 평균 점수 비교 (0~100 환산)",
-                xaxis_title="평균 점수",
-                height=300,
-                margin=dict(t=40, b=60)
-            )
-            st.markdown(f"### {mid}")
-            st.plotly_chart(fig, use_container_width=True)
+        x=series.values,
+        y=series.index,
+        orientation='h',
+        text=series.round(1),
+        textposition='outside',
+        marker_color='steelblue'
+    ))
+    if mid_mean is not None:
+        fig.add_vline(x=mid_mean, line_dash="dash", line_color="red",
+                      annotation_text=f"중분류 평균 {mid_mean:.1f}", annotation_position="top right")
+    fig.update_layout(
+        title=f"{midcategory} 내 문항별 평균 점수 비교 (0~100 환산)",
+        xaxis_title="평균 점수",
+        height=300,
+        margin=dict(t=40, b=60)
+    )
+    return fig
 
 # ─────────────────────────────────────────────────────
 # ▶️ Streamlit 실행
