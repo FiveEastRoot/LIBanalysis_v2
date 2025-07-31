@@ -959,7 +959,11 @@ COLOR_CYCLER = cycle(px.colors.qualitative.Plotly)
 
 # 2. 동적으로 실제 세그먼트 컬럼 리스트 반환
 def get_segment_columns(df, key):
-    if key == "DQ4":
+    if key == "SQ2":
+        if "SQ2_GROUP" in df.columns:
+            return ["SQ2_GROUP"]
+        return [col for col in df.columns if "SQ2" in col]
+    elif key == "DQ4":
         return [col for col in df.columns if ("DQ4" in col) and ("1순위" in col)]
     elif key == "DQ1":
         # 파생(범주화) 먼저
@@ -1008,13 +1012,35 @@ def add_derived_columns(df):
         if dq4_cols:
             df["DQ4_1ST"] = df[dq4_cols[0]]
     return df
+    if "SQ2_GROUP" not in df.columns:
+        sq2_cols = [c for c in df.columns if "SQ2" in c]
+        if sq2_cols:
+            sq2_col = sq2_cols[0]
+            # 숫자 추출 후 정수 변환
+            data = df[sq2_col].dropna().astype(str).str.extract(r'(\d+)')
+            data.columns = ['age']
+            data['age'] = pd.to_numeric(data['age'], errors='coerce').dropna()
+            def age_group(age):
+                if pd.isna(age):
+                    return None
+                age = int(age)
+                if age < 15:
+                    return '14세 이하'
+                elif age >= 80:
+                    return '80세 이상'
+                else:
+                    base = (age // 5) * 5
+                    return f"{base}~{base+4}세"
+            df["SQ2_GROUP"] = data['age'].apply(age_group)
+    return df
+
 
 # 4. 메인 분석 및 시각화 함수
 def page_segment_analysis(df):
     st.header("🧩 이용자 세그먼트 조합 분석")
     st.markdown("""
     - SQ1~5, DQ1, DQ2, DQ4(1순위) 중 **최대 3개** 문항 선택  
-    - 선택한 보기 조합별(응답자 5명 이상)로 Q1~Q6, Q9-D-3 중분류별 만족도 평균을 **레이더 차트**로 비교
+    - 선택한 보기 조합별(응답자 10명 이상)로 Q1~Q6, Q9-D-3 중분류별 만족도 평균을 **레이더 차트**로 비교
     """)
 
     seg_labels = [o["label"] for o in SEGMENT_OPTIONS]
@@ -1052,7 +1078,7 @@ def page_segment_analysis(df):
 
     group = seg_df.groupby(segment_cols, dropna=False)
     counts = group.size().reset_index(name="응답자수")
-    counts = counts[counts["응답자수"] >= 5]
+    counts = counts[counts["응답자수"] >= 10]
     if counts.empty:
         st.warning("응답자 5명 이상인 세그먼트 조합이 없습니다.")
         return
