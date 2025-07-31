@@ -1173,18 +1173,25 @@ def page_segment_analysis(df):
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # 세그먼트 조합별 응답자 수 표에서 숫자 연령 컬럼(SQ2 등) 제거
-    drop_cols = [c for c in counts.columns if (
-        c.startswith("SQ2") and "GROUP" not in c  # SQ2 중 SQ2_GROUP 아니면 제거
-    ) or (c == "DQ2_YEARS")  # DQ2 년수도 마찬가지
+    # 1. segment_cols 내 숫자 컬럼 제거
+    segment_cols_filtered = [
+        c for c in segment_cols
+        if not (c.startswith("SQ2") and "GROUP" not in c) and c != "DQ2_YEARS"
     ]
 
-    # 실제로 컬럼 제거!
+    # 2. 표 컬럼 순서 정렬
+    table_cols = segment_cols_filtered + midcats + ["중분류평균", "전체평균대비편차"]
+    table_with_stats = group_means[table_cols]
+
+    # 3. 응답자수 표도 동일하게 제거
+    drop_cols = [c for c in counts.columns if (
+        c.startswith("SQ2") and "GROUP" not in c
+    ) or (c == "DQ2_YEARS")]
     counts_for_display = counts.drop(columns=drop_cols, errors='ignore')
 
+    # 4. 표 출력
     st.markdown("#### 세그먼트별 중분류 만족도 (평균 및 전체편차 포함)")
     st.dataframe(table_with_stats, use_container_width=True)
-
 # ─────────────────────────────────────────────────────
 # 실행 엔트리
 # ─────────────────────────────────────────────────────
