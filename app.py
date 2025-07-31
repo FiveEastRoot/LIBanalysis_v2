@@ -905,7 +905,7 @@ def plot_abc_radar(df_mean):
         fig.add_trace(go.Scatterpolar(
             r = vals + [vals[0]],
             theta = categories + [categories[0]],
-            fill = 'toself',
+            fill = 'none',
             name = t,
             line=dict(color=color_map.get(t, None)),
         ))
