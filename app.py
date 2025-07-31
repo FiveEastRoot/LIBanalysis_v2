@@ -1287,11 +1287,11 @@ def page_segment_analysis(df):
     st.plotly_chart(fig_delta, use_container_width=True)
 
 
-    # --- 평균 차이 + 간이 신뢰구간 막대 (예: 특정 중분류별 상위 5개) ---
+    # --- 평균 차이 + 간이 신뢰구간 막대 (예: 특정 중분류별 상위 10개) ---
     st.markdown("### 전체 평균 대비 편차와 간이 신뢰구간 (중분류별)")
     import numpy as np
     for mc in midcats[:2]:  # 부담 줄이려고 첫 두 개만; 필요하면 반복 범위 확장
-        subset = group_means.nlargest(5, "응답자수").copy()
+        subset = group_means.nlargest(10, "응답자수").copy()
         subset["delta"] = subset[mc] - overall_means[mc]
         # 근사 표준오차: p*(1-p)/n 형태를 변형 (점수 범위 0~100이므로 단순화)
         # 실제로는 개별 응답자 데이터를 bootstrap 하는 게 정확함
