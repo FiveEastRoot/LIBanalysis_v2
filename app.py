@@ -523,7 +523,7 @@ def plot_within_category_bar(df, midcategory, wrap_width=20):
         title=f"{midcategory} 내 문항별 평균 점수 비교 (0~100 환산)",
         xaxis_title=f"{midcategory} 평균 {mid_mean:.2f}" if mid_mean is not None else "평균 점수",
         margin=dict(t=40, b=60),
-        height= (50 + 30 * len(wrapped_labels))  # 항목 수에 따라 높이 자동 확장
+        height= (50 + 50 * len(wrapped_labels))  # 항목 수에 따라 높이 자동 확장
     )
 
     if mid_mean is not None:
