@@ -489,7 +489,7 @@ def plot_midcategory_radar(df):
     return fig
 
 
-def wrap_label_fixed(label: str, width: int = 20) -> str:
+def wrap_label_fixed(label: str, width: int = 35) -> str:
     # 한 줄에 공백 포함 정확히 width 글자씩 자르고 <br>로 연결
     parts = [label[i:i+width] for i in range(0, len(label), width)]
     return "<br>".join(parts)
@@ -509,7 +509,7 @@ def plot_within_category_bar(df, midcategory):
     mid_mean = mid_scores.get(midcategory, None)
 
     # 고정 너비(15자) 줄바꿈된 y축 라벨
-    wrapped_labels = [wrap_label_fixed(label, width=20) for label in series_plot.index]
+    wrapped_labels = [wrap_label_fixed(label, width=35) for label in series_plot.index]
 
     fig = go.Figure()
     fig.add_trace(go.Bar(
