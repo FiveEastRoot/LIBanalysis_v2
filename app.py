@@ -751,7 +751,6 @@ def plot_pair_bar(df, prefix):
     table_fig.update_layout(height=250, margin=dict(t=10, b=10))
     return fig, table_fig, question
 # ------------------ Likert 스케일 변환 / 중분류 정의 ------------------
-# 7점 척도 → 0~100 변환
 def scale_likert(series):
     return 100 * (pd.to_numeric(series, errors='coerce') - 1) / 6
 
@@ -846,10 +845,12 @@ def plot_within_category_bar(df, midcategory):
         marker_color='steelblue'
     ))
     if mid_mean is not None:
-        fig.add_vline(x=mid_mean, line_color="red")
+        fig.add_vline(x=mid_mean, line_dash="dash", line_color="red",
+                      annotation_text=f"중분류 평균 {mid_mean:.2f}", annotation_position="top right")
     fig.update_layout(
         title=f"{midcategory} 내 문항별 평균 점수 비교 (0~100 환산)",
-        xaxis_title=f"{midcategory}중분류 평균 {mid_mean:.2f}",
+        xaxis_title="평균 점수",
+        height=300,
         margin=dict(t=40, b=60)
     )
     # 하단 표: 항목별 평균 + 편차
@@ -1089,7 +1090,7 @@ with main_tabs[6]:
             if tbl is not None:
                 st.plotly_chart(tbl, use_container_width=True)
                 # 다운로드 버튼: 항목별 편차 테이블
-                csv_bytes = table_df.reset_index().rename(columns={"index": "문항"}).to_csv(index=False).encode('utf-8-bom')
+                csv_bytes = table_df.reset_index().rename(columns={"index": "문항"}).to_csv(index=False).encode('utf-8-sig')
                 st.download_button(
                     label=f"{mid} 항목별 편차 다운로드 (CSV)",
                     data=csv_bytes,
