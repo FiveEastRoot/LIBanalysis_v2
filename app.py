@@ -470,14 +470,16 @@ def plot_midcategory_radar(df):
         r=values_closed,
         theta=categories_closed,
         fill='toself',
-        name='중분류 만족도'
+        name='중분류 만족도',
+        hovertemplate="%{theta}: %{r:.1f}<extra></extra>"
     ))
     fig.add_trace(go.Scatterpolar(
         r=avg_values_closed,
         theta=categories_closed,
         fill=None,
-        name='전체 평균',
-        line=dict(color='red', dash='solid')
+        name=f"전체 평균 ({overall_mean:.1f})",
+        line=dict(color='red', dash='solid'),
+        hovertemplate=f"전체 평균: {overall_mean:.1f}<extra></extra>"
     ))
     fig.update_layout(
         polar=dict(radialaxis=dict(range=[0,100], tickformat=".0f")),
