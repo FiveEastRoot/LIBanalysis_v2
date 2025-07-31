@@ -843,12 +843,16 @@ with main_tabs[3]:
     with sub_tabs[0]:
         fig1, tbl1, q1 = plot_dq1(df)
         render_chart_and_table(fig1, tbl1, q1, key_prefix="dq1")
+
         fig2, tbl2, q2 = plot_dq2(df)
         render_chart_and_table(fig2, tbl2, q2, key_prefix="dq2")
+
         fig3, tbl3, q3 = plot_dq3(df)
         render_chart_and_table(fig3, tbl3, q3, key_prefix="dq3")
+
         fig4, tbl4, q4 = plot_dq4_bar(df)
         render_chart_and_table(fig4, tbl4, q4, key_prefix="dq4")
+
         fig5, tbl5, q5 = plot_dq5(df)
         render_chart_and_table(fig5, tbl5, q5, key_prefix="dq5")
 
@@ -861,10 +865,12 @@ with main_tabs[3]:
             for col in dq6_cols:
                 st.markdown(f"### {col}")
                 if col == dq6_cols[0]:
+                    # 기존 방식: 1순위 항목을 explode해서 계산한 뒤 DataFrame으로 정리
                     multi = df[col].dropna().astype(str).str.split(',')
                     exploded = multi.explode().str.strip()
                     counts = exploded.value_counts()
                     percent = (counts / counts.sum() * 100).round(1)
+
                     fig = go.Figure(go.Bar(
                         x=counts.values, y=counts.index,
                         orientation='h', text=counts.values,
@@ -881,13 +887,7 @@ with main_tabs[3]:
                         '응답 수': counts,
                         '비율 (%)': percent
                     }).T
-                    table_fig = go.Figure(go.Table(
-                        header=dict(values=[""] + list(table_df.columns), align='center'),
-                        cells=dict(values=[table_df.index] + [table_df[c].tolist() for c in table_df.columns], align='center')
-                    ))
-                    table_fig.update_layout(height=250, margin=dict(t=10,b=5))
-                    st.plotly_chart(fig, use_container_width=True)
-                    st.plotly_chart(table_fig, use_container_width=True)
+                    render_chart_and_table(fig, table_df, col, key_prefix="dq6")
                 else:
                     bar, tbl = plot_categorical_stacked_bar(df, col)
                     render_chart_and_table(bar, tbl, col, key_prefix="dq6")
@@ -912,7 +912,7 @@ with main_tabs[5]:
         render_chart_and_table(fig9, tbl9, q9, key_prefix="weakness")
     else:
         st.warning("DQ9 문항이 없습니다.")
-
+        
 with main_tabs[6]:
     st.header("🔍 심화 분석")
     st.subheader("중분류별 전체 만족도 (레이더 차트 및 평균값)")
