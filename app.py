@@ -73,7 +73,7 @@ def plot_bq2_bar(df, question):
     ))
     y_max = counts.max() + 20
     fig.update_layout(
-        title=dict(text=question, font=dict(size=26)),
+        title=dict(text=question, font=dict(size=20)),
         yaxis=dict(title="응답 수", range=[0, y_max]),
         height=450,
         margin=dict(t=50, b=100),
@@ -110,7 +110,7 @@ def plot_sq4_custom_bar(df, question):
     fig.update_layout(
         barmode='stack', showlegend=True,
         legend=dict(orientation='h', y=-0.5, x=0.5, xanchor='center', traceorder='reversed'),
-        title=dict(text=question, font=dict(size=26))
+        title=dict(text=question, font=dict(size=20))
         , yaxis=dict(showticklabels=False),
         height=250, margin=dict(t=40, b=100)
     )
@@ -162,7 +162,7 @@ def plot_categorical_stacked_bar(df, question):
             xanchor='center', x=0.5,
             traceorder='reversed'
         ),
-        title=dict(text=question, font=dict(size=26)),
+        title=dict(text=question, font=dict(size=20)),
         yaxis=dict(showticklabels=False),
         height=250, margin=dict(t=40, b=100)
     )
