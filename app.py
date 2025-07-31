@@ -1333,87 +1333,87 @@ def page_segment_analysis(df):
     st.markdown("#### 세그먼트 조합별 중분류별 만족도 및 응답자수")
     st.dataframe(table_with_stats, use_container_width=True)
 
-# --- 유틸: DQ4(이용 목적) 컬럼 추론 -----------------
-def infer_dq4_primary_column(df):
-    for c in df.columns:
-        if "DQ4" in c and "1순위" in c:
-            return c
-    for c in df.columns:
-        if "DQ4" in c:
-            return c
-    return None
+    # --- 유틸: DQ4(이용 목적) 컬럼 추론 -----------------
+    def infer_dq4_primary_column(df):
+        for c in df.columns:
+            if "DQ4" in c and "1순위" in c:
+                return c
+        for c in df.columns:
+            if "DQ4" in c:
+                return c
+        return None
 
-# --- 전략 인사이트용: 이용 목적 × 전반 만족도 레이더 차트 ---
-st.subheader("1. 이용 목적 (DQ4 계열) × 전반 만족도 (중분류 기준 레이더)")
+    # --- 전략 인사이트용: 이용 목적 × 전반 만족도 레이더 차트 ---
+    st.subheader("1. 이용 목적 (DQ4 계열) × 전반 만족도 (중분류 기준 레이더)")
 
-purpose_col = infer_dq4_primary_column(df)
-if purpose_col is None:
-    st.warning("이용 목적 관련 컬럼(DQ4 계열)을 찾을 수 없어 전반 만족도 대비 레이더를 그릴 수 없습니다.")
-else:
-    overall_mid_scores = compute_midcategory_scores(df)
-    if overall_mid_scores.empty:
-        st.warning("중분류 점수 계산에 필요한 문항이 부족합니다.")
+    purpose_col = infer_dq4_primary_column(df)
+    if purpose_col is None:
+        st.warning("이용 목적 관련 컬럼(DQ4 계열)을 찾을 수 없어 전반 만족도 대비 레이더를 그릴 수 없습니다.")
     else:
-        midcats = list(overall_mid_scores.index)
-        # top_n을 사이드바에서 정할 수 있게
-        top_n = st.sidebar.number_input("레이더에 표시할 상위 이용 목적 개수", min_value=1, max_value=10, value=5, step=1, key="radar_top_n")
-        purpose_counts = df[purpose_col].dropna().astype(str).value_counts()
-        top_purposes = purpose_counts.nlargest(top_n).index.tolist()
+        overall_mid_scores = compute_midcategory_scores(df)
+        if overall_mid_scores.empty:
+            st.warning("중분류 점수 계산에 필요한 문항이 부족합니다.")
+        else:
+            midcats = list(overall_mid_scores.index)
+            # top_n을 사이드바에서 정할 수 있게
+            top_n = st.sidebar.number_input("레이더에 표시할 상위 이용 목적 개수", min_value=1, max_value=10, value=5, step=1, key="radar_top_n")
+            purpose_counts = df[purpose_col].dropna().astype(str).value_counts()
+            top_purposes = purpose_counts.nlargest(top_n).index.tolist()
 
-        fig = go.Figure()
-        # 전체 평균
-        overall_vals = [overall_mid_scores.get(m, 0) for m in midcats]
-        fig.add_trace(go.Scatterpolar(
-            r=overall_vals + [overall_vals[0]],
-            theta=midcats + [midcats[0]],
-            fill=None,
-            name="전체 평균",
-            line=dict(dash='dash', width=2),
-            opacity=0.8
-        ))
-
-        colors = px.colors.qualitative.Plotly
-        for i, purpose in enumerate(top_purposes):
-            subset = df[df[purpose_col].astype(str) == purpose]
-            if len(subset) < 5:
-                continue
-            purpose_scores = compute_midcategory_scores(subset)
-            # 목적 그룹에 필요한 중분류가 없으면 전체 평균으로 채움
-            vals = [purpose_scores.get(m, overall_mid_scores.get(m, 0)) for m in midcats]
+            fig = go.Figure()
+            # 전체 평균
+            overall_vals = [overall_mid_scores.get(m, 0) for m in midcats]
             fig.add_trace(go.Scatterpolar(
-                r=vals + [vals[0]],
+                r=overall_vals + [overall_vals[0]],
                 theta=midcats + [midcats[0]],
-                fill='toself',
-                name=f"{purpose} (n={int(purpose_counts[purpose])})",
-                hovertemplate="%{theta}: %{r:.1f}<extra></extra>",
-                marker=dict(color=colors[i % len(colors)]),
-                opacity=0.6
+                fill=None,
+                name="전체 평균",
+                line=dict(dash='dash', width=2),
+                opacity=0.8
             ))
 
-        fig.update_layout(
-            polar=dict(radialaxis=dict(range=[50, 100])),
-            title=f"상위 {len(top_purposes)}개 이용 목적별 중분류 만족도 vs 전체 평균",
-            height=450,
-            legend=dict(orientation="v", x=1.02, y=0.9)
-        )
-        st.plotly_chart(fig, use_container_width=True)
+            colors = px.colors.qualitative.Plotly
+            for i, purpose in enumerate(top_purposes):
+                subset = df[df[purpose_col].astype(str) == purpose]
+                if len(subset) < 5:
+                    continue
+                purpose_scores = compute_midcategory_scores(subset)
+                # 목적 그룹에 필요한 중분류가 없으면 전체 평균으로 채움
+                vals = [purpose_scores.get(m, overall_mid_scores.get(m, 0)) for m in midcats]
+                fig.add_trace(go.Scatterpolar(
+                    r=vals + [vals[0]],
+                    theta=midcats + [midcats[0]],
+                    fill='toself',
+                    name=f"{purpose} (n={int(purpose_counts[purpose])})",
+                    hovertemplate="%{theta}: %{r:.1f}<extra></extra>",
+                    marker=dict(color=colors[i % len(colors)]),
+                    opacity=0.6
+                ))
 
-        # 요약 테이블: 목적별 중분류 점수 + 전체 평균
-        summary_rows = []
-        for purpose in top_purposes:
-            subset = df[df[purpose_col].astype(str) == purpose]
-            if len(subset) < 5:
-                continue
-            purpose_scores = compute_midcategory_scores(subset)
-            row = {"이용목적": purpose, "응답자수": int(purpose_counts[purpose])}
-            for m in midcats:
-                row[f"{m} (목적)"] = round(purpose_scores.get(m, overall_mid_scores.get(m, 0)), 1)
-                row[f"{m} (전체 평균)"] = round(overall_mid_scores.get(m, 0), 1)
-            summary_rows.append(row)
-        if summary_rows:
-            summary_df = pd.DataFrame(summary_rows)
-            st.markdown("#### 상위 이용 목적별 중분류 프로파일 요약")
-            st.dataframe(summary_df)
+            fig.update_layout(
+                polar=dict(radialaxis=dict(range=[50, 100])),
+                title=f"상위 {len(top_purposes)}개 이용 목적별 중분류 만족도 vs 전체 평균",
+                height=450,
+                legend=dict(orientation="v", x=1.02, y=0.9)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            # 요약 테이블: 목적별 중분류 점수 + 전체 평균
+            summary_rows = []
+            for purpose in top_purposes:
+                subset = df[df[purpose_col].astype(str) == purpose]
+                if len(subset) < 5:
+                    continue
+                purpose_scores = compute_midcategory_scores(subset)
+                row = {"이용목적": purpose, "응답자수": int(purpose_counts[purpose])}
+                for m in midcats:
+                    row[f"{m} (목적)"] = round(purpose_scores.get(m, overall_mid_scores.get(m, 0)), 1)
+                    row[f"{m} (전체 평균)"] = round(overall_mid_scores.get(m, 0), 1)
+                summary_rows.append(row)
+            if summary_rows:
+                summary_df = pd.DataFrame(summary_rows)
+                st.markdown("#### 상위 이용 목적별 중분류 프로파일 요약")
+                st.dataframe(summary_df)
 
     st.subheader("2. 이용 목적 (DQ4 계열) × 세부 항목 효과 (Q6-B 계열)")
     q6b_cols = [c for c in df.columns if c.startswith("Q6-B")]
