@@ -1053,6 +1053,9 @@ with main_tabs[5]:
 with main_tabs[6]:
     st.header("🔍 심화 분석")
 
+with main_tabs[6]:
+    st.header("🔍 심화 분석")
+
     # 1) 중분류별 전체 만족도 (레이더)
     st.subheader("중분류별 전체 만족도 (레이더 차트 및 평균값)")
     radar = plot_midcategory_radar(df)
