@@ -1158,7 +1158,7 @@ def page_segment_analysis(df):
 # ---- 히트맵 그리기 함수 분리 ----
 def show_segment_heatmap(group_means, segment_cols, midcats):
     def row_label(row):
-        return " | ".join([f"{col}:{row[col]}" for col in segment_cols])
+        return " | ".join([str(row[col]) for col in segment_cols])
     heatmap_df = group_means.copy()
     heatmap_df["조합"] = heatmap_df.apply(row_label, axis=1)
     heatmap_plot = heatmap_df.set_index("조합")[midcats]
