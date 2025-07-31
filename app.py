@@ -1068,6 +1068,7 @@ with main_tabs[6]:
                 file_name="midcategory_avg_scores.csv",
                 mime="text/csv"
             )
+            st.markdown("---")
         else:
             st.warning("중분류 평균을 계산할 수 없습니다.")
     else:
