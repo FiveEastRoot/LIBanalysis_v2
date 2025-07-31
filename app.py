@@ -488,44 +488,9 @@ def plot_midcategory_radar(df):
     )
     return fig
 
-def auto_wrap_label(label: str, max_lines: int = 3, max_chars_per_line: int = 30):
-    """
-    주어진 label을 max_lines 안에 넣기 위해 한 줄 최대 길이를 자동 조정해서 <br>로 줄바꿈한 문자열 반환.
-    """
-    words = label.split()
-    if not words:
-        return label
 
-    # 최소/최대 wrap_width 탐색: 한 줄에 들어갈 문자 수
-    # 시작은 전체 길이 / max_lines
-    avg = max(1, len(label) // max_lines)
-    wrap_width = min(max_chars_per_line, max(5, avg))
 
-    def wrap_with_width(width):
-        lines = []
-        current = ""
-        for w in words:
-            if len(current) + len(w) + (1 if current else 0) <= width:
-                current = f"{current} {w}" if current else w
-            else:
-                lines.append(current)
-                current = w
-        if current:
-            lines.append(current)
-        return lines
-
-    # 점진적으로 width 늘려서 lines 수 <= max_lines
-    for w in range(wrap_width, max_chars_per_line + 1):
-        lines = wrap_with_width(w)
-        if len(lines) <= max_lines:
-            return "<br>".join(lines)
-    # 실패하면 강제로 나눔: 균등하게 분할
-    approx = max(1, len(label) // max_lines)
-    # fallback naive split
-    chunks = [label[i:i+approx] for i in range(0, len(label), approx)]
-    return "<br>".join(chunks[:max_lines])
-
-def plot_within_category_bar(df, midcategory):
+def plot_within_category_bar(df, midcategory, wrap_width=20):
     item_scores = compute_within_category_item_scores(df)
     if midcategory not in item_scores:
         return None, None
@@ -534,24 +499,25 @@ def plot_within_category_bar(df, midcategory):
     if not orig_cols:
         return None, None
 
+    # 원본 순서대로 (역순은 시각화용)
     series_plot = item_scores[midcategory].reindex(orig_cols[::-1])
     series_table = item_scores[midcategory].reindex(orig_cols)
     mid_scores = compute_midcategory_scores(df)
     mid_mean = mid_scores.get(midcategory, None)
 
-    # 자동 줄바꿈된 y축 라벨
-    wrapped_labels = [auto_wrap_label(label, max_lines=3, max_chars_per_line=25) for label in series_plot.index]
+    # 줄바꿈된 라벨 (y축)
+    wrapped_labels = [wrap_label(label, width=wrap_width) for label in series_plot.index]
 
     fig = go.Figure()
     fig.add_trace(go.Bar(
         x=series_plot.values,
-        y=wrapped_labels,
+        y=wrapped_labels,  # 줄바꿈된 라벨
         orientation='h',
         text=series_plot.round(1),
         textposition='outside',
         marker_color='steelblue',
         hovertemplate="<b>%{customdata}</b><br>평균 점수: %{x:.1f}<extra></extra>",
-        customdata=series_plot.index
+        customdata=series_plot.index  # 원래 라벨을 hover에
     ))
     if mid_mean is not None:
         fig.add_vline(x=mid_mean, line_color="red", annotation_text=f"중분류 평균: {mid_mean:.1f}", annotation_position="top right")
@@ -559,7 +525,7 @@ def plot_within_category_bar(df, midcategory):
         title=f"{midcategory} 내 문항별 평균 점수 비교 (0~100 환산)",
         xaxis_title=f"{midcategory} 평균 {mid_mean:.2f}" if mid_mean is not None else "평균 점수",
         margin=dict(t=40, b=60),
-        height= max(300, 40 * len(wrapped_labels))  # 항목 수에 비례해서 높이 조절
+        height= (50 + 50 * len(wrapped_labels))  # 항목 수에 따라 높이 자동 확장
     )
 
     if mid_mean is not None:
@@ -574,7 +540,6 @@ def plot_within_category_bar(df, midcategory):
             '평균 점수': series_table.round(2)
         }, index=series_table.index)
     return fig, table_df
-
 
 # ------------------ DQ 관련 ------------------
 def plot_dq1(df):
