@@ -740,6 +740,15 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
             orientation='h',
             marker_color=color
         ))
+
+    # **0 위치에 검은색 실선 추가**
+    fig.add_vline(
+        x=0,
+        line_color="black",
+        line_width=2,
+        line_dash="solid"
+    )
+
     fig.update_layout(
         barmode='relative',
         title="DQ7-E 도서관 이미지 분포 (다이버징 바)",
@@ -749,8 +758,9 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
         margin=dict(t=30, b=5),
     )
 
-    table_df = likert_df.copy()  # <- DataFrame 반환
+    table_df = likert_df.copy()
     return fig, table_df
+
 
 
 def plot_pair_bar(df, prefix):
