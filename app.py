@@ -48,16 +48,10 @@ def plot_age_histogram_with_labels(df, question):
         bargap=0.1, height=450, margin=dict(t=40, b=10)
     )
 
-    # Table
+    # summary DataFrame (이제 Plotly Table 대신)
     table_df = pd.DataFrame({'응답 수': grouped, '비율 (%)': percent}).T
-    table_fig = go.Figure(go.Table(
-        header=dict(values=[""]+list(table_df.columns)),
-        cells=dict(values=[table_df.index] + [table_df[c].tolist() for c in table_df.columns])
-    ))
-    table_fig.update_layout(height=180, margin=dict(t=10, b=5))
 
-    return fig, table_fig
-
+    return fig, table_df
 # ─────────────────────────────────────────────────────
 # BQ2: 직업군 Bar + Table
 # ─────────────────────────────────────────────────────
@@ -394,7 +388,7 @@ def page_home(df):
             else:
                 bar, tbl = plot_categorical_stacked_bar(df, q)
             st.plotly_chart(bar, use_container_width=True)
-            st.plotly_chart(tbl, use_container_width=True)
+            show_table(tbl_df, q)
             st.divider()
         except Exception as e:
             st.error(f"{q} 에러: {e}")
@@ -1068,7 +1062,7 @@ with main_tabs[6]:
         st.plotly_chart(radar, use_container_width=True)
         tbl_avg = midcategory_avg_table(df)
         if not tbl_avg.empty:
-            show_table(tbl_avg, "중분류별 평균 점수")
+            show_table(tbl_avg, "중분류별 평균 점수", "midcategory_avg_scores")
             st.markdown("---")
         else:
             st.warning("중분류 평균을 계산할 수 없습니다.")
@@ -1088,8 +1082,9 @@ with main_tabs[6]:
             st.markdown(f"### {mid}")
             st.plotly_chart(fig, use_container_width=True)
             if table_df is not None:
-                show_table(
-    table_df.reset_index().rename(columns={"index": "문항"}),
-    f"{mid} 항목별 편차"
-)
+                show_table_with_download(
+                    table_df.reset_index().rename(columns={"index": "문항"}),
+                    f"{mid} 항목별 편차",
+                    f"{mid.replace(' ','_')}_within_item_variance"
+                )
                 st.markdown("---")
