@@ -15,17 +15,10 @@ def remove_parentheses(text):
     return re.sub(r'\(.*?\)', '', text).strip()
 def wrap_label(label, width=10):
     return '<br>'.join([label[i:i+width] for i in range(0, len(label), width)])
-# 네이티브 테이블로 보여주고 다운로드 버튼 추가
-def show_table_with_download(df, caption, filename_base):
+# 네이티브 테이블로 보여주는 유틸 (다운로드 버튼 제거, Streamlit 내장 복사/다운로드 사용)
+def show_table(df, caption):
     st.markdown(f"#### {caption}")
     st.dataframe(df)
-    csv_bytes = df.to_csv(index=False).encode('utf-8-sig')
-    st.download_button(
-        label=f"{caption} 다운로드 (CSV)",
-        data=csv_bytes,
-        file_name=f"{filename_base}.csv",
-        mime="text/csv"
-    )
 
 # ─────────────────────────────────────────────────────
 # SQ2: 연령 히스토그램 + Table
@@ -773,7 +766,7 @@ def plot_pair_bar(df, prefix):
 
 
 # ------------------ Likert 스케일 변환 / 중분류 정의 ------------------
-def scale_likert(series):
+def scale_likert(series):(series):
     return 100 * (pd.to_numeric(series, errors='coerce') - 1) / 6
 
 MIDDLE_CATEGORY_MAPPING = {
@@ -894,6 +887,7 @@ def plot_within_category_bar(df, midcategory):
             '평균 점수': series_table.round(2)
         }, index=series_table.index)
     return fig, table_df
+
 
 # ─────────────────────────────────────────────────────
 # ▶️ Streamlit 실행
@@ -1067,9 +1061,6 @@ with main_tabs[5]:
 with main_tabs[6]:
     st.header("🔍 심화 분석")
 
-with main_tabs[6]:
-    st.header("🔍 심화 분석")
-
     # 1) 중분류별 전체 만족도 (레이더)
     st.subheader("중분류별 전체 만족도 (레이더 차트 및 평균값)")
     radar = plot_midcategory_radar(df)
@@ -1077,7 +1068,7 @@ with main_tabs[6]:
         st.plotly_chart(radar, use_container_width=True)
         tbl_avg = midcategory_avg_table(df)
         if not tbl_avg.empty:
-            show_table_with_download(tbl_avg, "중분류별 평균 점수", "midcategory_avg_scores")
+            show_table(tbl_avg, "중분류별 평균 점수", "midcategory_avg_scores")
             st.markdown("---")
         else:
             st.warning("중분류 평균을 계산할 수 없습니다.")
@@ -1103,4 +1094,3 @@ with main_tabs[6]:
                     f"{mid.replace(' ','_')}_within_item_variance"
                 )
                 st.markdown("---")
-
