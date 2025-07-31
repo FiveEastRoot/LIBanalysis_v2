@@ -337,19 +337,72 @@ def extract_keyword_and_audience(responses, batch_size=20):
     return results
 
 @st.cache_data(show_spinner=False)
+def extract_keyword_and_audience(responses, batch_size=20):  # 원래 배치 사이즈
+    results = []
+    for i in range(0, len(responses), batch_size):
+        batch = responses[i:i+batch_size]
+        prompt = f"""
+당신은 도서관 자유응답에서 아래 형식의 JSON 배열만 반환합니다.
+각 객체는 응답, 키워드 목록(1~3개), 대상층(유아/아동/청소년/일반)을 포함해야 합니다.
+
+예시Output:
+[
+  {{"response": "응답1", "keywords": ["키워드1","키워드2"], "audience": "청소년"}},
+  ...
+]
+
+응답 목록:
+{chr(10).join(f"{j+1}. {txt}" for j, txt in enumerate(batch))}
+"""
+        resp = client.chat.completions.create(
+            model="gpt-3.5-turbo",  # 빠른 처리 위해 모델을 낮춰 사용,
+            messages=[{"role": "system", "content": prompt}],
+            temperature=0.2,
+            max_tokens=300  # 토큰 제한 축소로 처리 시간 단축
+        )
+        content = resp.choices[0].message.content.strip()
+        try:
+            data = pd.read_json(content)
+        except Exception:
+            # fallback: 수동 분할 + 기본 규칙
+            data = []
+            for txt in batch:
+                kws = split_keywords_simple(txt)
+                audience = '일반'
+                for w in ['어린이','초등']:
+                    if w in txt: audience='아동'
+                for w in ['유아','미취학','그림책']:
+                    if w in txt: audience='유아'
+                for w in ['청소년','진로','자기계발']:
+                    if w in txt: audience='청소년'
+                data.append({
+                    'response': txt,
+                    'keywords': kws,
+                    'audience': audience
+                })
+            data = pd.DataFrame(data)
+        for _, row in data.iterrows():
+            results.append((row['response'], row['keywords'], row['audience']))
+    return results
+
+@st.cache_data(show_spinner=False)
 def process_answers(responses):
+    # 콤마(,) 기준으로 다중 응답 분리
     expanded = []
     for ans in responses:
+        # trivial 응답 제외 전처리
         if is_trivial(ans):
             continue
         parts = [p.strip() for p in ans.split(',') if p.strip()]
+        # 단일 또는 다중 항목 처리
         if len(parts) > 1:
             expanded.extend(parts)
         else:
             expanded.append(ans)
 
     processed = []
-    batches = extract_keyword_and_audience(expanded, batch_size=8)
+    # 통합 호출 횟수 계산
+    batches = extract_keyword_and_audience(expanded, batch_size=8)  # 호출 횟수 조정 (원래는 20, 중간에 8 쓴 부분)
     for resp, kws, aud in batches:
         if is_trivial(resp):
             continue
@@ -357,7 +410,7 @@ def process_answers(responses):
             kws = split_keywords_simple(resp)
         for kw in kws:
             cat = map_keyword_to_category(kw)
-            if cat == '해당없음' and aud == '일반':
+            if cat=='해당없음' and aud=='일반':
                 continue
             processed.append({
                 '응답': resp,
@@ -366,7 +419,6 @@ def process_answers(responses):
                 '대상범주': aud
             })
     return pd.DataFrame(processed)
-
 def show_short_answer_keyword_analysis(df_result):
     st.subheader("📘 Q9-DS-4 단문 응답 키워드 분석")
     order = list(KDC_KEYWORD_MAP.keys())
