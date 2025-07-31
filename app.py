@@ -827,6 +827,27 @@ def page_short_keyword(df):
 # ─────────────────────────────────────────────────────
 # 실행 엔트리
 # ─────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────
+# 상단에 mode 선택 추가 (사이드 탭 역할)
+mode = st.sidebar.radio("분석 모드", ["기본 분석", "심화 분석"])
+
+# 기존 메인 탭 이름 정의 (심화 분석 탭은 별도 처리)
+base_tab_names = [
+    "👤 응답자 정보",
+    "📈 만족도 기본 시각화",
+    "🗺️ 자치구 구성 문항",
+    "📊도서관 이용양태 분석",
+    "🖼️ 도서관 이미지 분석",
+    "🏋️ 도서관 강약점 분석",
+]
+
+if mode == "기본 분석":
+    # 심화 분석 탭 제외
+    main_tabs = st.tabs(base_tab_names)
+elif mode == "심화 분석":
+    # 기존 탭에 '공통 심화 분석(전체)' 추가, 기존 심화 분석("🔍 심화 분석")은 제거된 상태로
+    main_tabs = st.tabs(base_tab_names + ["공통 심화 분석(전체)"])
+
 st.set_page_config(
     page_title="공공도서관 설문 시각화 대시보드",
     layout="wide"
@@ -965,35 +986,38 @@ with main_tabs[5]:
     else:
         st.warning("DQ9 문항이 없습니다.")
 
-with main_tabs[6]:
-    st.header("🔍 심화 분석")
-    st.subheader("중분류별 전체 만족도 (레이더 차트 및 평균값)")
-    radar = plot_midcategory_radar(df)
-    if radar is not None:
-        st.plotly_chart(radar, use_container_width=True)
-        tbl_avg = midcategory_avg_table(df)
-        if not tbl_avg.empty:
-            show_table(tbl_avg, "중분류별 평균 점수")
-            st.markdown("---")
-        else:
-            st.warning("중분류 평균을 계산할 수 없습니다.")
-    else:
-        st.warning("필요한 문항이 없어 중분류 점수를 계산할 수 없습니다.")
-
-    st.subheader("중분류 내 문항별 편차")
-    mid_scores = compute_midcategory_scores(df)
-    if mid_scores.empty:
-        st.warning("중분류 문항이 없어 편차를 계산할 수 없습니다.")
-    else:
-        for mid in mid_scores.index:
-            fig, table_df = plot_within_category_bar(df, mid)
-            if fig is None:
-                continue
-            st.markdown(f"### {mid}")
-            st.plotly_chart(fig, use_container_width=True)
-            if table_df is not None:
-                show_table(
-                    table_df.reset_index().rename(columns={"index": "문항"}),
-                    f"{mid} 항목별 편차"
-                )
+# 기존 main_tabs[6]에 있었던 심화 분석 내용 재배치
+if mode == "심화 분석":
+    # "공통 심화 분석(전체)"은 base_tab_names 뒤에 붙은 마지막 탭
+    with main_tabs[-1]:
+        st.header("🔍 공통 심화 분석(전체)")
+        st.subheader("중분류별 전체 만족도 (레이더 차트 및 평균값)")
+        radar = plot_midcategory_radar(df)
+        if radar is not None:
+            st.plotly_chart(radar, use_container_width=True)
+            tbl_avg = midcategory_avg_table(df)
+            if not tbl_avg.empty:
+                show_table(tbl_avg, "중분류별 평균 점수")
                 st.markdown("---")
+            else:
+                st.warning("중분류 평균을 계산할 수 없습니다.")
+        else:
+            st.warning("필요한 문항이 없어 중분류 점수를 계산할 수 없습니다.")
+
+        st.subheader("중분류 내 문항별 편차")
+        mid_scores = compute_midcategory_scores(df)
+        if mid_scores.empty:
+            st.warning("중분류 문항이 없어 편차를 계산할 수 없습니다.")
+        else:
+            for mid in mid_scores.index:
+                fig, table_df = plot_within_category_bar(df, mid)
+                if fig is None:
+                    continue
+                st.markdown(f"### {mid}")
+                st.plotly_chart(fig, use_container_width=True)
+                if table_df is not None:
+                    show_table(
+                        table_df.reset_index().rename(columns={"index": "문항"}),
+                        f"{mid} 항목별 편차"
+                    )
+                    st.markdown("---")
