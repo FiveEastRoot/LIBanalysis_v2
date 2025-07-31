@@ -1164,7 +1164,7 @@ def page_segment_analysis(df):
         seg_info.update(means)
         group_means.append(seg_info)
 
-        group_means = pd.DataFrame(group_means) 
+    group_means = pd.DataFrame(group_means) 
 
     # 2. 행별 중분류 평균, 전체평균대비편차 추가
     group_means["중분류평균"] = group_means[midcats].mean(axis=1).round(2)
