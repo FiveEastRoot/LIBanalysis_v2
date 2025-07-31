@@ -669,11 +669,11 @@ def plot_dq4_bar(df):
     fig = go.Figure()
     fig.add_trace(go.Bar(
         x=sorted_labels, y=sorted_counts1.values,
-        name='1순위', marker_color='blue', text=sorted_counts1.values, textposition='outside'
+        name='1순위', marker_color='light blue', text=sorted_counts1.values, textposition='outside'
     ))
     fig.add_trace(go.Bar(
         x=sorted_labels, y=sorted_counts2.values,
-        name='2순위', marker_color='green', text=sorted_counts2.values, textposition='outside'
+        name='2순위', marker_color='light green', text=sorted_counts2.values, textposition='outside'
     ))
     fig.update_layout(
         barmode='stack',
