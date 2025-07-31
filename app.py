@@ -1111,20 +1111,30 @@ def page_segment_analysis(df):
     # 1. 세그먼트별 중분류별 평균점수 집계
     midcats = list(MIDCAT_MAP.keys())
     group_means = []
-    for cat, prefix in MIDCAT_MAP.items():
-        if isinstance(prefix, list):
-            # 여러 prefix를 합쳐서 컬럼 추출
-            cols = []
-            for p in prefix:
-                cols += [c for c in gdf.columns if c.startswith(p)]
-        else:
-            cols = [c for c in gdf.columns if c.startswith(prefix)]
-        if not cols:
-            means[cat] = None
-            continue
-        vals = gdf[cols].apply(pd.to_numeric, errors="coerce")
-        mean_val = 100 * (vals.mean(axis=1, skipna=True) - 1) / 6
-        means[cat] = round(mean_val.mean(), 2)
+
+    for idx, row in counts.iterrows():
+        # 1. 세그먼트 키 추출 (groupby와 순서 일치해야 함)
+        key = tuple(row[c] for c in segment_cols)
+        gdf = group.get_group(key)   # 반드시 루프 안에서 선언!
+        means = {}
+
+        for cat, prefix in MIDCAT_MAP.items():
+            if isinstance(prefix, list):
+                cols = []
+                for p in prefix:
+                    cols += [c for c in gdf.columns if c.startswith(p)]
+            else:
+                cols = [c for c in gdf.columns if c.startswith(prefix)]
+            if not cols:
+                means[cat] = None
+                continue
+            vals = gdf[cols].apply(pd.to_numeric, errors="coerce")
+            mean_val = 100 * (vals.mean(axis=1, skipna=True) - 1) / 6
+            means[cat] = round(mean_val.mean(), 2)
+        seg_info = {col: row[col] for col in segment_cols}
+        seg_info.update(means)
+        group_means.append(seg_info)
+
     group_means = pd.DataFrame(group_means)
 
     # 2. 행별 평균, 전체평균 대비 편차 추가
