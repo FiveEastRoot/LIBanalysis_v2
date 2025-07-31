@@ -1391,11 +1391,11 @@ def show_basic_strategy_insights(df):
                 fig.add_trace(go.Scatterpolar(
                     r=vals + [vals[0]],
                     theta=midcats + [midcats[0]],
-                    fill='toself',
+                    fill='none',
                     name=f"{purpose} (n={int(purpose_counts[purpose])})",
                     hovertemplate="%{theta}: %{r:.1f}<extra></extra>",
                     marker=dict(color=colors[i % len(colors)]),
-                    opacity=0.2
+                    opacity=0.4
                 ))
 
             fig.update_layout(
