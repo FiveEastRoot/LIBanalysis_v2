@@ -819,20 +819,24 @@ def plot_within_category_bar(df, midcategory):
         return None
     series = item_scores[midcategory].sort_values(ascending=False)
     fig = go.Figure(go.Bar(
-        x=series.values,
-        y=series.index,
-        orientation='h',
-        text=series.round(1),
-        textposition='outside',
-        marker_color='steelblue'
-    ))
-    fig.update_layout(
-        title=f"{midcategory} 내 문항별 평균 점수 비교 (0~100 환산)",
-        xaxis_title="평균 점수",
-        height=350,
-        margin=dict(t=40, b=60)
-    )
-    return fig
+                x=series.values,
+                y=series.index,
+                orientation='h',
+                text=series.round(1),
+                textposition='outside',
+                marker_color='steelblue'
+            ))
+            # 중분류 전체 평균(아이템 평균들의 평균) 선 추가
+            mid_mean = mid_scores[mid]
+            fig.add_vline(x=mid_mean, line_dash="dash", line_color="red", annotation_text=f"중분류 평균 {mid_mean:.1f}", annotation_position="top right")
+            fig.update_layout(
+                title=f"{mid} 내 문항별 평균 점수 비교 (0~100 환산)",
+                xaxis_title="평균 점수",
+                height=300,
+                margin=dict(t=40, b=60)
+            )
+            st.markdown(f"### {mid}")
+            st.plotly_chart(fig, use_container_width=True)
 
 # ─────────────────────────────────────────────────────
 # ▶️ Streamlit 실행
@@ -1005,24 +1009,52 @@ with main_tabs[5]:
 # 7) 심화 분석 탭
 with main_tabs[6]:
     st.header("🔍 심화 분석")
-    advanced_tabs = st.tabs(["공통 심화 분석", "중분류 내 문항 편차"]);
 
-    with advanced_tabs[0]:
-        st.subheader("중분류별 전체 만족도 (레이더 차트)")
-        radar = plot_midcategory_radar(df)
-        if radar:
-            st.plotly_chart(radar, use_container_width=True)
-        else:
-            st.warning("중분류 점수를 계산할 수 있는 문항이 부족합니다.")
-
-    with advanced_tabs[1]:
-        st.subheader("중분류 내 문항별 편차")
+    # 1) 중분류별 전체 만족도 (레이더)
+    st.subheader("중분류별 전체 만족도 (레이더 차트 및 평균값)")
+    radar = plot_midcategory_radar(df)
+    if radar is not None:
+        st.plotly_chart(radar, use_container_width=True)
+        # 평균값 테이블
         mid_scores = compute_midcategory_scores(df)
-        if mid_scores.empty:
-            st.warning("중분류 문항이 없어 편차를 계산할 수 없습니다.")
+        if not mid_scores.empty:
+            tbl_avg = mid_scores.rename("평균 점수(0~100)").to_frame().reset_index().rename(columns={"index": "중분류"})
+            tbl_avg["평균 점수(0~100)"] = tbl_avg["평균 점수(0~100)"].round(1)
+            st.markdown("#### 중분류별 평균 점수")
+            st.table(tbl_avg)
         else:
-            for mid in mid_scores.index:
-                bar = plot_within_category_bar(df, mid)
-                if bar:
-                    st.markdown(f"### {mid}")
-                    st.plotly_chart(bar, use_container_width=True)
+            st.warning("중분류 평균을 계산할 수 없습니다.")
+    else:
+        st.warning("필요한 문항이 없어 중분류 점수를 계산할 수 없습니다.")
+
+    # 2) 중분류 내 문항 편차 (같은 페이지 아래)
+    st.subheader("중분류 내 문항별 편차")
+    mid_scores = compute_midcategory_scores(df)
+    if mid_scores.empty:
+        st.warning("중분류 문항이 없어 편차를 계산할 수 없습니다.")
+    else:
+        within_scores = compute_within_category_item_scores(df)
+        for mid in mid_scores.index:
+            series = within_scores.get(mid)
+            if series is None or series.empty:
+                continue
+            # 원래 df.columns 순서 유지
+            predicate = MIDDLE_CATEGORY_MAPPING[mid]
+            orig_cols = [c for c in df.columns if predicate(c)]
+            series = series.reindex(orig_cols)
+            fig = go.Figure(go.Bar(
+                x=series.values,
+                y=series.index,
+                orientation='h',
+                text=series.round(1),
+                textposition='outside',
+                marker_color='steelblue'
+            ))
+            fig.update_layout(
+                title=f"{mid} 내 문항별 평균 점수 비교 (0~100 환산)",
+                xaxis_title="평균 점수",
+                height=300,
+                margin=dict(t=40, b=60)
+            )
+            st.markdown(f"### {mid}")
+            st.plotly_chart(fig, use_container_width=True)
