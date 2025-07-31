@@ -932,6 +932,152 @@ def plot_abc_grouped_bar(df_mean):
     fig.update_yaxes(range=[0,100])
     return fig
 
+#----------------------------
+#이용자 세그먼트 분석
+#------------------------------
+
+def dq1_to_group(val):
+    """DQ1: 월평균 이용빈도(숫자) → 연환산 범주로 변환"""
+    try:
+        monthly = float(str(val).replace(",", ""))
+    except: return None
+    yearly = monthly * 12
+    if yearly < 12: return "0~11회: 연 1회 미만"
+    elif yearly < 24: return "12~23회: 월 1회 정도"
+    elif yearly < 48: return "24~47회: 월 2~4회 정도"
+    elif yearly < 72: return "48~71회: 주 1회 정도"
+    elif yearly < 144: return "72~143회: 주 2~3회"
+    else: return "144회 이상: 거의 매일"
+
+def dq2_to_group(val):
+    """DQ2: 이용기간(자유입력) → n년 범주로 변환"""
+    s = str(val)
+    m = re.match(r'(\d+)\s*년\s*(\d+)\s*개월', s)
+    if m: return f"{int(m.group(1))+1 if int(m.group(2))>0 else int(m.group(1))}년"
+    m = re.match(r'(\d+)\s*년', s)
+    if m: return f"{m.group(1)}년"
+    m = re.match(r'(\d+)\s*개월', s)
+    if m: return "1년"
+    return None
+
+def build_segment_df(df, selected_keys, segment_label_map):
+    seg_df = pd.DataFrame(index=df.index)
+    for k in selected_keys:
+        col = segment_label_map[k]
+        if k == "DQ1":
+            seg_df[col] = df[col].apply(dq1_to_group)
+        elif k == "DQ2":
+            seg_df[col] = df[col].apply(dq2_to_group)
+        else:
+            seg_df[col] = df[col].astype(str)
+    return seg_df
+
+def get_group_combinations(seg_df):
+    """입력된 세그먼트 DataFrame에서 조합별 마스크 반환"""
+    from itertools import product
+    value_lists = [seg_df[c].dropna().unique().tolist() for c in seg_df.columns]
+    for combo in product(*value_lists):
+        mask = (seg_df[seg_df.columns[0]] == combo[0])
+        for i, v in enumerate(combo[1:], 1):
+            mask &= (seg_df[seg_df.columns[i]] == v)
+        idxs = seg_df[mask].index
+        yield combo, idxs
+
+def compute_group_category_scores(df, idxs, mid_map):
+    """지정 인덱스 subset에 대해 중분류별 7점 척도 평균(0~100) 산출"""
+    subdf = df.loc[idxs]
+    scores = {}
+    for mid, pred in mid_map.items():
+        cols = [c for c in df.columns if pred(c)]
+        if not cols: continue
+        vals = subdf[cols].apply(pd.to_numeric, errors='coerce')
+        meanval = 100 * (vals.mean(axis=1, skipna=True) - 1) / 6
+        scores[mid] = round(meanval.mean(), 2)
+    return scores
+
+def page_segment_analysis(df):
+    st.header("🔎 이용자 세그먼트 조합 분석")
+
+    # --- 선택 가능 세그먼트 옵션 정의 ---
+    SEGMENT_OPTIONS = [
+        ("SQ1", "SQ1. 성별"),
+        ("SQ2", "SQ2. 연령대"),
+        ("SQ3", "SQ3. 거주지"),
+        ("SQ4", "SQ4. 직업"),
+        ("SQ5", "SQ5. 이용목적"),
+        ("DQ1", "DQ1. 월평균 이용 빈도"),
+        ("DQ2", "DQ2. 도서관 이용기간"),
+        ("DQ4", next((c for c in df.columns if "DQ4" in c and "1순위" in c), None)),
+    ]
+    SEGMENT_OPTIONS = [(k, v) for k, v in SEGMENT_OPTIONS if v is not None]
+    seg_key_map = {k: v for k, v in SEGMENT_OPTIONS}
+
+    # --- 사용자 세그먼트 컬럼 선택 ---
+    seg_keys = [k for k, _ in SEGMENT_OPTIONS]
+    selected_keys = st.multiselect(
+        "분석할 세그먼트(최대 3개)", 
+        options=seg_keys, 
+        format_func=lambda k: seg_key_map[k], 
+        max_selections=3
+    )
+    if not selected_keys:
+        st.info("세그먼트를 선택하세요.")
+        return
+
+    seg_df = build_segment_df(df, selected_keys, seg_key_map)
+
+    # --- 5명 이상인 그룹 조합 산출 ---
+    MID_MAP = {
+        "공간 및 이용편의성": lambda c: str(c).startswith("Q1-"),
+        "정보 획득 및 활용": lambda c: str(c).startswith("Q2-"),
+        "소통 및 정책 활용": lambda c: str(c).startswith("Q3-"),
+        "문화·교육 향유": lambda c: str(c).startswith("Q4-"),
+        "사회적 관계 형성": lambda c: str(c).startswith("Q5-"),
+        "개인의 삶과 역량": lambda c: str(c).startswith("Q6-"),
+    }
+    group_infos = []
+    for combo, idxs in get_group_combinations(seg_df):
+        if len(idxs) >= 5:
+            scores = compute_group_category_scores(df, idxs, MID_MAP)
+            group_infos.append({
+                "label": " / ".join(f"{col.split('. ',1)[-1]}: {val}" for col, val in zip(seg_df.columns, combo)),
+                "n": len(idxs),
+                **scores
+            })
+
+    if not group_infos:
+        st.warning("응답자 5명 이상인 세그먼트 조합이 없습니다.")
+        return
+
+    # --- 레이더차트 ---
+    cats = list(MID_MAP.keys())
+    fig = go.Figure()
+    color_iter = cycle(px.colors.qualitative.Plotly)
+    for group in group_infos:
+        r = [group.get(c, 0) for c in cats]
+        r += [r[0]]
+        theta = cats + [cats[0]]
+        fig.add_trace(go.Scatterpolar(
+            r=r, theta=theta, 
+            name=f"{group['label']} (n={group['n']})",
+            line=dict(color=next(color_iter), width=2), 
+            fill=None
+        ))
+    fig.update_layout(
+        polar=dict(radialaxis=dict(range=[0, 100])),
+        title="세그먼트별 중분류 만족도 평균 비교 (응답자 5명 이상)",
+        showlegend=True,
+        height=650
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    # --- 표로 요약 ---
+    st.markdown("#### 세그먼트별 응답자 수 및 점수")
+    df_table = pd.DataFrame(group_infos)
+    st.dataframe(df_table)
+
+
+
 # ─────────────────────────────────────────────────────
 # 실행 엔트리
 # ─────────────────────────────────────────────────────
@@ -1078,7 +1224,7 @@ if mode == "기본 분석":
             st.warning("DQ9 문항이 없습니다.")
 
 elif mode == "심화 분석":
-    tabs = st.tabs(["공통 심화 분석(전체)", "공통 심화 분석(영역)"])
+    tabs = st.tabs(["공통 심화 분석(전체)", "공통 심화 분석(영역)", "이용자 세그먼트 조합 분석"])
     with tabs[0]:
         st.header("🔍 공통 심화 분석(전체)")
         st.subheader("중분류별 전체 만족도 (레이더 차트 및 평균값)")
@@ -1125,3 +1271,5 @@ elif mode == "심화 분석":
 
         st.markdown("#### 상세 데이터")
         st.dataframe(df_mean)
+    with tabs[2]:
+        page_segment_analysis(df)
