@@ -766,7 +766,7 @@ def plot_pair_bar(df, prefix):
 
 
 # ------------------ Likert 스케일 변환 / 중분류 정의 ------------------
-def scale_likert(series):(series):
+def scale_likert(series):
     return 100 * (pd.to_numeric(series, errors='coerce') - 1) / 6
 
 MIDDLE_CATEGORY_MAPPING = {
