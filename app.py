@@ -230,6 +230,7 @@ def plot_stacked_bar_with_table(df, question):
 #----------------------------------------------------------------------------- 
 # 단문 분석 관련 유틸
 #-----------------------------------------------------------------------------
+# 🔧 KDC 매핑 및 분석 유틸
 KDC_KEYWORD_MAP = {
     '000 총류': ["백과사전", "도서관", "독서", "문헌정보", "기록", "출판", "서지"],
     '100 철학': ["철학", "명상", "윤리", "논리학", "심리학"],
@@ -246,97 +247,26 @@ KDC_KEYWORD_MAP = {
     '해당없음': []
 }
 
+# 응답이 trivial 한지 검사
 def is_trivial(text):
     text = str(text).strip()
     return text in ["", "X", "x", "감사합니다", "감사", "없음"]
 
+# 주제범주 매핑
 def map_keyword_to_category(keyword):
     for cat, kws in KDC_KEYWORD_MAP.items():
         if any(k in keyword for k in kws):
             return cat
     return "해당없음"
 
+# 단순 분할(Fallback)
 def split_keywords_simple(text):
     parts = re.split(r"[.,/\s]+", text)
     return [p.strip() for p in parts if len(p.strip()) > 1]
 
+# 통합 추출: 키워드 + 대상범주
 @st.cache_data(show_spinner=False)
-def extract_keyword_and_audience(responses, batch_size=20):
-    results = []
-    for i in range(0, len(responses), batch_size):
-        batch = responses[i:i+batch_size]
-        prompt = f"""
-당신은 도서관 자유응답에서 아래 형식의 JSON 배열만 반환합니다.
-각 객체는 응답, 키워드 목록(1~3개), 대상층(유아/아동/청소년/일반)을 포함해야 합니다.
-
-예시Output:
-[
-  {{"response": "응답1", "keywords": ["키워드1","키워드2"], "audience": "청소년"}},
-  ...
-]
-
-응답 목록:
-{chr(10).join(f"{j+1}. {txt}" for j, txt in enumerate(batch))}
-"""
-        try:
-            resp = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "system", "content": prompt}],
-                temperature=0.2,
-                max_tokens=300
-            )
-            content = resp.choices[0].message.content.strip()
-            try:
-                data = pd.read_json(content)
-            except Exception as e:
-                logging.warning(f"GPT parsing failed: {e}; content snippet: {content[:500]}")
-                data = []
-                for txt in batch:
-                    kws = split_keywords_simple(txt)
-                    audience = '일반'
-                    for w in ['어린이','초등']:
-                        if w in txt:
-                            audience='아동'
-                    for w in ['유아','미취학','그림책']:
-                        if w in txt:
-                            audience='유아'
-                    for w in ['청소년','진로','자기계발']:
-                        if w in txt:
-                            audience='청소년'
-                    data.append({
-                        'response': txt,
-                        'keywords': kws,
-                        'audience': audience
-                    })
-                data = pd.DataFrame(data)
-        except Exception as e:
-            logging.warning(f"GPT request failed: {e}")
-            data = []
-            for txt in batch:
-                kws = split_keywords_simple(txt)
-                audience = '일반'
-                for w in ['어린이','초등']:
-                    if w in txt:
-                        audience='아동'
-                for w in ['유아','미취학','그림책']:
-                    if w in txt:
-                        audience='유아'
-                for w in ['청소년','진로','자기계발']:
-                    if w in txt:
-                        audience='청소년'
-                data.append({
-                    'response': txt,
-                    'keywords': kws,
-                    'audience': audience
-                })
-            data = pd.DataFrame(data)
-
-        for _, row in data.iterrows():
-            results.append((row.get('response'), row.get('keywords'), row.get('audience')))
-    return results
-
-@st.cache_data(show_spinner=False)
-def extract_keyword_and_audience(responses, batch_size=20):  # 원래 배치 사이즈
+def extract_keyword_and_audience(responses, batch_size=20):  # 배치 크기 증가로 호출 횟수 감소:  # 배치 크기 축소로 응답 지연 개선  # 배치 크기 축소로 응답 지연 개선
     results = []
     for i in range(0, len(responses), batch_size):
         batch = responses[i:i+batch_size]
@@ -384,6 +314,9 @@ def extract_keyword_and_audience(responses, batch_size=20):  # 원래 배치 사
             results.append((row['response'], row['keywords'], row['audience']))
     return results
 
+# 전체 응답 처리
+import math
+
 @st.cache_data(show_spinner=False)
 def process_answers(responses):
     # 콤마(,) 기준으로 다중 응답 분리
@@ -401,7 +334,7 @@ def process_answers(responses):
 
     processed = []
     # 통합 호출 횟수 계산
-    batches = extract_keyword_and_audience(expanded, batch_size=8)  # 호출 횟수 조정 (원래는 20, 중간에 8 쓴 부분)
+    batches = extract_keyword_and_audience(expanded, batch_size=8)  # 호출 횟수 조정
     for resp, kws, aud in batches:
         if is_trivial(resp):
             continue
@@ -418,20 +351,21 @@ def process_answers(responses):
                 '대상범주': aud
             })
     return pd.DataFrame(processed)
+
+
+
+# 시각화 페이지 함수
 def show_short_answer_keyword_analysis(df_result):
     st.subheader("📘 Q9-DS-4 단문 응답 키워드 분석")
     order = list(KDC_KEYWORD_MAP.keys())
-
     df_cat = df_result.groupby("주제범주")["키워드"].count().reindex(order, fill_value=0).reset_index(name="빈도수")
     fig = px.bar(df_cat, x="주제범주", y="빈도수", title="주제범주별 키워드 빈도", text="빈도수")
     fig.update_traces(textposition="outside")
     st.plotly_chart(fig, use_container_width=True)
-
     df_aud = df_result.groupby("대상범주")["키워드"].count().reset_index(name="빈도수")
     fig2 = px.bar(df_aud, x="대상범주", y="빈도수", title="대상범주별 키워드 빈도", text="빈도수", color="대상범주")
     fig2.update_traces(textposition="outside")
     st.plotly_chart(fig2, use_container_width=True)
-
     st.markdown("#### 🔍 분석 결과 테이블")
     st.dataframe(df_result[["응답", "키워드", "주제범주", "대상범주"]])
 
