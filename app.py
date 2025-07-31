@@ -840,14 +840,16 @@ base_tab_names = [
     "🖼️ 도서관 이미지 분석",
     "🏋️ 도서관 강약점 분석",
 ]
-
+expert_tab_name = [
+    ""공통 심화 분석(전체)"
+]
 
 if mode == "기본 분석":
     # 심화 분석 탭 제외
     base_tab_names = st.tabs(base_tab_names)
 elif mode == "심화 분석":
     # 기존 탭에 '공통 심화 분석(전체)' 추가, 기존 심화 분석("🔍 심화 분석")은 제거된 상태로
-    base_tab_names = st.tabs(base_tab_names + ["공통 심화 분석(전체)"])
+    base_tab_names = st.tabs(expert_tab_name)
 
 st.set_page_config(
     page_title="공공도서관 설문 시각화 대시보드",
@@ -981,7 +983,7 @@ with base_tab_names[5]:
 # 기존 base_tab_names[6]에 있었던 심화 분석 내용 재배치
 if mode == "심화 분석":
     # "공통 심화 분석(전체)"은 base_tab_names 뒤에 붙은 마지막 탭
-    with base_tab_names[-1]:
+    with expert_tab_name[0]:
         st.header("🔍 공통 심화 분석(전체)")
         st.subheader("중분류별 전체 만족도 (레이더 차트 및 평균값)")
         radar = plot_midcategory_radar(df)
