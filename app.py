@@ -1040,7 +1040,7 @@ def page_segment_analysis(df):
     st.header("🧩 이용자 세그먼트 조합 분석")
     st.markdown("""
     - SQ1~5, DQ1, DQ2, DQ4(1순위) 중 **최대 3개** 문항 선택  
-    - 선택한 보기 조합별(응답자 10명 이상)로 Q1~Q6, Q9-D-3 중분류별 만족도 평균을 **레이더 차트**로 비교
+    - 선택한 보기 조합별(응답자 5명 이상)로 Q1~Q6, Q9-D-3 중분류별 만족도 평균을 **레이더 차트**로 비교
     """)
 
     seg_labels = [o["label"] for o in SEGMENT_OPTIONS]
@@ -1078,7 +1078,7 @@ def page_segment_analysis(df):
 
     group = seg_df.groupby(segment_cols, dropna=False)
     counts = group.size().reset_index(name="응답자수")
-    counts = counts[counts["응답자수"] >= 10]
+    counts = counts[counts["응답자수"] >= 5]
     if counts.empty:
         st.warning("응답자 5명 이상인 세그먼트 조합이 없습니다.")
         return
