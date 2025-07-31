@@ -910,7 +910,7 @@ def plot_abc_radar(df_mean):
             line=dict(color=color_map.get(t, None)),
         ))
     fig.update_layout(
-        polar=dict(radialaxis=dict(range=[40, 100])),
+        polar=dict(radialaxis=dict(range=[50, 100])),
         title="중분류별 서비스 평가/효과/만족도 (A/B/C) 레이더차트",
         showlegend=True,
         height=450
