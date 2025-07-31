@@ -1333,17 +1333,31 @@ def page_segment_analysis(df):
     st.markdown("#### 세그먼트 조합별 중분류별 만족도 및 응답자수")
     st.dataframe(table_with_stats, use_container_width=True)
 
-def show_basic_strategy_insights(df):
-    st.subheader("1. 주로 이용 서비스(SQ5) × 전반 만족도 (중분류 기준 레이더)")
-    # 이용 목적 대체: SQ5
-    purpose_col = None
-    for candidate in df.columns:
-        if "SQ5" in candidate or "주로 이용 서비스" in candidate:
-            purpose_col = candidate
-            break
+# --- 유틸: 목적/운영시간 컬럼 추론 --------------------------------
+def infer_dq4_primary_column(df):
+    cols = list(df.columns)
+    for c in cols:
+        if "DQ4" in c and "1순위" in c:
+            return c
+    for c in cols:
+        if "DQ4" in c:
+            return c
+    return None
 
+def infer_time_satisfaction_column(df):
+    for c in df.columns:
+        if c.upper().startswith("Q7-D-7"):
+            return c
+        if "운영시간" in c or "시간 만족도" in c:
+            return c
+    return None
+
+# --- 전략 인사이트(기본) 시각화 --------------------------------
+def show_basic_strategy_insights(df):
+    st.subheader("1. 이용 목적 (DQ4 계열) × 전반 만족도 (중분류 기준 레이더)")
+    purpose_col = infer_dq4_primary_column(df)
     if purpose_col is None:
-        st.warning("이용 목적으로 사용할 SQ5 관련 컬럼을 찾을 수 없어 전반 만족도 대비 레이더를 그릴 수 없습니다.")
+        st.warning("이용 목적 관련 컬럼(DQ4 계열)을 찾을 수 없어 전반 만족도 대비 레이더를 그릴 수 없습니다.")
     else:
         overall_mid_scores = compute_midcategory_scores(df)
         midcats = list(overall_mid_scores.index)
@@ -1371,17 +1385,17 @@ def show_basic_strategy_insights(df):
             ))
             fig.update_layout(
                 polar=dict(radialaxis=dict(range=[50, 100])),
-                title=f"주로 이용 서비스 '{purpose}' vs 전체 평균 중분류 만족도",
+                title=f"이용 목적 '{purpose}' vs 전체 평균 중분류 만족도",
                 height=400,
                 showlegend=True
             )
             st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("2. 주로 이용 서비스(SQ5) × 세부 항목 효과 (Q6-B 계열)")
+    st.subheader("2. 이용 목적 (DQ4 계열) × 세부 항목 효과 (Q6-B 계열)")
     q6b_cols = [c for c in df.columns if c.startswith("Q6-B")]
     if purpose_col is None or not q6b_cols:
         if purpose_col is None:
-            st.warning("이용 목적 기준인 SQ5 컬럼이 없어 Q6-B 계열 효과를 그룹별로 비교할 수 없습니다.")
+            st.warning("이용 목적 컬럼이 없어 Q6-B 계열 효과를 이용 목적별로 비교할 수 없습니다.")
         if not q6b_cols:
             st.warning("Q6-B 계열 문항을 찾을 수 없습니다.")
     else:
@@ -1395,35 +1409,40 @@ def show_basic_strategy_insights(df):
             scaled = 100 * (vals.mean(axis=1, skipna=True) - 1) / 6
             mean_effect = scaled.mean()
             effect_rows.append({
-                "주로 이용 서비스": purpose,
-                "Q6-B 효과 평균(0~100)": round(mean_effect, 2),
+                "이용목적": purpose,
+                "Q6-B 계열 효과 평균(0~100)": round(mean_effect, 2),
                 "응답자수": len(scaled.dropna())
             })
         if effect_rows:
-            effect_df = pd.DataFrame(effect_rows).sort_values("Q6-B 효과 평균(0~100)", ascending=False)
+            effect_df = pd.DataFrame(effect_rows).sort_values("Q6-B 계열 효과 평균(0~100)", ascending=False)
             fig = px.bar(
                 effect_df,
-                x="주로 이용 서비스",
-                y="Q6-B 효과 평균(0~100)",
-                text="Q6-B 효과 평균(0~100)",
-                title="주로 이용 서비스별 Q6-B 계열 세부 효과 평균 비교",
+                x="이용목적",
+                y="Q6-B 계열 효과 평균(0~100)",
+                text="Q6-B 계열 효과 평균(0~100)",
+                title="이용 목적별 Q6-B 계열 세부 효과 평균 비교",
                 hover_data=["응답자수"]
             )
             fig.update_traces(texttemplate="%{text:.1f}", textposition="outside")
             st.plotly_chart(fig, use_container_width=True)
             st.dataframe(effect_df)
         else:
-            st.info("주로 이용 서비스별로 충분한 응답이 없어 Q6-B 효과 비교를 할 수 없습니다.")
+            st.info("이용 목적별로 충분한 응답이 없어 Q6-B 효과 비교를 할 수 없습니다.")
 
     st.subheader("3. 주이용서비스별 중분류 만족도 (SQ5 기준)")
-    if purpose_col is None:
-        st.warning("주이용서비스 기준 컬럼을 찾을 수 없어 분석 불가입니다.")
+    service_col = None
+    for candidate in df.columns:
+        if "SQ5" in candidate or "주로 이용 서비스" in candidate:
+            service_col = candidate
+            break
+    if service_col is None:
+        st.warning("주이용서비스 관련 컬럼을 찾을 수 없어 중분류 만족도 비교를 할 수 없습니다.")
     else:
-        services = df[purpose_col].dropna().astype(str).unique()
+        services = df[service_col].dropna().astype(str).unique()
         overall_mid_scores = compute_midcategory_scores(df)
         midcats = list(overall_mid_scores.index)
         for service in services:
-            subset = df[df[purpose_col].astype(str) == service]
+            subset = df[df[service_col].astype(str) == service]
             if len(subset) < 5:
                 continue
             service_scores = compute_midcategory_scores(subset)
@@ -1448,7 +1467,7 @@ def show_basic_strategy_insights(df):
                 line=dict(dash="dash")
             ))
             fig.update_layout(
-                title=f"주로 이용 서비스 '{service}' 별 중분류 만족도 vs 전체 평균",
+                title=f"주이용서비스 '{service}' 별 중분류 만족도 vs 전체 평균",
                 yaxis_title="만족도 (0~100)",
                 barmode="group",
                 height=400
@@ -1486,19 +1505,15 @@ def show_basic_strategy_insights(df):
             fig.update_traces(texttemplate="%{text:.1f}", textposition="outside")
             st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("5. 주로 이용 서비스(SQ5)×운영시간 만족도 (기대 대비 시간 만족도)")
-    time_sat_col = None
-    for c in df.columns:
-        if c.startswith("Q7-D-7"):
-            time_sat_col = c
-            break
+    st.subheader("5. 이용 목적 (DQ4 계열) × 운영시간 만족도 (Q7-D-7)")
+    time_sat_col = infer_time_satisfaction_column(df)
     if purpose_col is None or time_sat_col is None:
-        st.warning("주로 이용 서비스 또는 운영시간 만족도 문항(Q7-D-7)이 없어 비교할 수 없습니다.")
+        st.warning("이용 목적 또는 운영시간 만족도 문항을 찾을 수 없어 비교할 수 없습니다.")
     else:
-        services = df[purpose_col].dropna().astype(str).unique()
+        purposes = df[purpose_col].dropna().astype(str).unique()
         rows = []
-        for service in services:
-            subset = df[df[purpose_col].astype(str) == service]
+        for purpose in purposes:
+            subset = df[df[purpose_col].astype(str) == purpose]
             if subset.empty:
                 continue
             vals = pd.to_numeric(subset[time_sat_col], errors='coerce').dropna().astype(float)
@@ -1506,7 +1521,7 @@ def show_basic_strategy_insights(df):
                 continue
             mean_score = vals.mean()
             rows.append({
-                "주로 이용 서비스": service,
+                "이용목적": purpose,
                 "운영시간 만족도 평균": round(mean_score, 2),
                 "응답자수": len(vals)
             })
@@ -1514,18 +1529,17 @@ def show_basic_strategy_insights(df):
             time_df = pd.DataFrame(rows).sort_values("운영시간 만족도 평균", ascending=False)
             fig = px.bar(
                 time_df,
-                x="주로 이용 서비스",
+                x="이용목적",
                 y="운영시간 만족도 평균",
                 text="운영시간 만족도 평균",
-                title="주로 이용 서비스별 운영시간(기대 대비) 만족도",
+                title="이용 목적별 운영시간(기대 대비) 만족도",
                 hover_data=["응답자수"]
             )
             fig.update_traces(texttemplate="%{text:.1f}", textposition="outside")
             st.plotly_chart(fig, use_container_width=True)
             st.dataframe(time_df)
         else:
-            st.info("비교 가능한 운영시간 만족도 데이터가 충분하지 않습니다.")
-
+            st.info("비교 가능한 이용목적별 운영시간 만족도 데이터가 충분하지 않습니다.")
 
 # ─────────────────────────────────────────────────────
 # 실행 엔트리
