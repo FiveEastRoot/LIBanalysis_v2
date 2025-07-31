@@ -743,7 +743,7 @@ def plot_pair_bar(df, prefix):
         '1순위 비율(%)': pct1.values,
         '2순위 응답 수': counts2.values,
         '2순위 비율(%)': pct2.values
-    }, index=labels).T
+    }, index=labels).T 
     table_fig = go.Figure(go.Table(
         header=dict(values=[""] + labels, align='center'),
         cells=dict(values=[table_df.index] + [table_df[l].tolist() for l in labels], align='center')
