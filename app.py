@@ -400,9 +400,13 @@ def page_basic_vis(df):
         with tab:
             st.markdown(f"### {section_name}")
             for q in section_mapping[section_name]:
-                bar, table_df = plot_stacked_bar_with_table(df, q)
-                st.plotly_chart(bar, use_container_width=True)
-                show_table(table_df, q)
+                try:
+                    bar, table_df = plot_stacked_bar_with_table(df, q)
+                    st.plotly_chart(bar, use_container_width=True)
+                    show_table(table_df, q)
+                except Exception as e:
+                    st.error(f"{q} 에러: {e}")
+            st.divider()
 
 #------------- 단문분석
 def page_short_keyword(df):
