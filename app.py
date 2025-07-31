@@ -1091,9 +1091,11 @@ def page_segment_analysis(df):
     midcat_prefixes = list(MIDCAT_MAP.values())
     analysis_cols = []
     for p in midcat_prefixes:
-        analysis_cols.extend([c for c in df2.columns if c.startswith(p)])
-    analysis_cols = list(dict.fromkeys(analysis_cols))
-
+        if isinstance(p, list):
+            for sub_p in p:
+                analysis_cols.extend([c for c in df2.columns if c.startswith(sub_p)])
+        else:
+            analysis_cols.extend([c for c in df2.columns if c.startswith(p)])
     seg_df = df2[segment_cols + analysis_cols].copy()
     seg_df = seg_df.dropna(subset=segment_cols, how='any')
     for c in segment_cols:
@@ -1109,22 +1111,20 @@ def page_segment_analysis(df):
     # 1. 세그먼트별 중분류별 평균점수 집계
     midcats = list(MIDCAT_MAP.keys())
     group_means = []
-    for idx, row in counts.iterrows():
-        key = tuple(row[c] for c in segment_cols)
-        gdf = group.get_group(key)
-        means = {}
-        for cat, prefix in MIDCAT_MAP.items():
+    for cat, prefix in MIDCAT_MAP.items():
+        if isinstance(prefix, list):
+            # 여러 prefix를 합쳐서 컬럼 추출
+            cols = []
+            for p in prefix:
+                cols += [c for c in gdf.columns if c.startswith(p)]
+        else:
             cols = [c for c in gdf.columns if c.startswith(prefix)]
-            if not cols:
-                means[cat] = None
-                continue
-            vals = gdf[cols].apply(pd.to_numeric, errors="coerce")
-            mean_val = 100 * (vals.mean(axis=1, skipna=True) - 1) / 6
-            means[cat] = round(mean_val.mean(), 2)
-        seg_info = {col: row[col] for col in segment_cols}
-        seg_info.update(means)
-        seg_info['응답자수'] = row['응답자수']  # ← 응답자 수 추가!
-        group_means.append(seg_info)
+        if not cols:
+            means[cat] = None
+            continue
+        vals = gdf[cols].apply(pd.to_numeric, errors="coerce")
+        mean_val = 100 * (vals.mean(axis=1, skipna=True) - 1) / 6
+        means[cat] = round(mean_val.mean(), 2)
     group_means = pd.DataFrame(group_means)
 
     # 2. 행별 평균, 전체평균 대비 편차 추가
