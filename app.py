@@ -37,7 +37,6 @@ def plot_age_histogram_with_labels(df, question):
     grouped = data['group'].value_counts().sort_index()
     percent = (grouped / grouped.sum() * 100).round(1)
 
-    # Bar
     fig = go.Figure(go.Bar(
         x=grouped.index, y=grouped.values,
         text=grouped.values, textposition='outside',
@@ -48,10 +47,9 @@ def plot_age_histogram_with_labels(df, question):
         bargap=0.1, height=450, margin=dict(t=40, b=10)
     )
 
-    # summary DataFrame (이제 Plotly Table 대신)
     table_df = pd.DataFrame({'응답 수': grouped, '비율 (%)': percent}).T
-
     return fig, table_df
+
 # ─────────────────────────────────────────────────────
 # BQ2: 직업군 Bar + Table
 # ─────────────────────────────────────────────────────
@@ -65,18 +63,14 @@ def plot_bq2_bar(df, question):
     counts = counts_raw.values
     percent = percent_raw.values
 
-    # 자동 줄바꿈 적용
     wrapped_labels = [wrap_label(remove_parentheses(label), width=10) for label in categories]
 
-    colors = px.colors.qualitative.Plotly
     fig = go.Figure(go.Bar(
         x=categories,
         y=counts,
         text=counts,
-        textposition='outside',
-        marker_color=colors[:len(categories)]
+        textposition='outside'
     ))
-
     y_max = counts.max() + 20
     fig.update_layout(
         title=dict(text=question, font=dict(size=16)),
@@ -86,15 +80,8 @@ def plot_bq2_bar(df, question):
         xaxis_tickangle=-30
     )
 
-    # 자동 줄바꿈된 레이블을 표에 사용
     table_df = pd.DataFrame({'응답 수': counts, '비율 (%)': percent}, index=wrapped_labels).T
-    table_fig = go.Figure(go.Table(
-        header=dict(values=[""] + list(table_df.columns), align='center', height=36, font=dict(size=11)),
-        cells=dict(values=[table_df.index] + [table_df[col].tolist() for col in table_df.columns], align='center', height=36, font=dict(size=11))
-    ))
-    table_fig.update_layout(height=150, margin=dict(t=10, b=5))
-
-    return fig, table_fig
+    return fig, table_df
 
 # ─────────────────────────────────────────────────────
 # SQ4: 커스텀 누적 가로 Bar + Table
@@ -103,37 +90,29 @@ def plot_sq4_custom_bar(df, question):
     data = df[question].dropna().astype(str)
     cats = sorted(data.unique())
     counts = data.value_counts().reindex(cats).fillna(0).astype(int)
-    percent = (counts/counts.sum()*100).round(1)
-    labels = [wrap_label(remove_parentheses(x),10) for x in cats]
-    colors = px.colors.qualitative.Plotly
+    percent = (counts / counts.sum() * 100).round(1)
+    labels = [wrap_label(remove_parentheses(x), 10) for x in cats]
 
     fig = go.Figure()
-    for i, cat in enumerate(cats):
+    for cat in cats:
         fig.add_trace(go.Bar(
             x=[percent[cat]], y=[question],
             orientation='h', name=remove_parentheses(cat),
-            marker_color=colors[i%len(colors)],
             text=f"{percent[cat]}%", textposition='inside'
         ))
     fig.update_layout(
         barmode='stack', showlegend=True,
         legend=dict(orientation='h', y=-0.5, x=0.5, xanchor='center', traceorder='reversed'),
         title=question, yaxis=dict(showticklabels=False),
-        height=250, margin=dict(t=40,b=100)
+        height=250, margin=dict(t=40, b=100)
     )
 
-    # 기존 table_df 생성
     table_df = pd.DataFrame({
         '응답 수': [counts[c] for c in cats],
         '비율 (%)': [percent[c] for c in cats]
     }, index=labels).T
-    
-    table_fig = go.Figure(go.Table(
-        header=dict(values=[""] + list(table_df.columns), align='center'),
-        cells=dict(values=[table_df.index] + [table_df[col].tolist() for col in table_df.columns], align='center')
-    ))
-    table_fig.update_layout(height=120, margin=dict(t=10, b=5))
-    return fig, table_fig 
+    return fig, table_df
+
 
 # ─────────────────────────────────────────────────────
 # 일반 범주형 누적 Bar + Table SQ5/SQ3/SQ4
@@ -145,23 +124,20 @@ def plot_categorical_stacked_bar(df, question):
 
     counts = data.value_counts().reindex(categories_raw).fillna(0).astype(int)
     percent = (counts / counts.sum() * 100).round(1)
-    colors = px.colors.qualitative.Plotly
 
     fig = go.Figure()
-    for i, cat in enumerate(reversed(categories)):
+    for cat in reversed(categories):
         raw_cat = categories_raw[categories.index(cat)]
         fig.add_trace(go.Bar(
             x=[percent[raw_cat]],
             y=[question],
             orientation='h',
             name=cat,
-            marker=dict(color=colors[i % len(colors)]),
             text=f"{percent[raw_cat]}%",
             textposition='inside',
             insidetextanchor='middle',
             hoverinfo='x+name'
         ))
-
     fig.update_layout(
         barmode='stack',
         showlegend=True,
@@ -179,17 +155,11 @@ def plot_categorical_stacked_bar(df, question):
     table_df = pd.DataFrame({
         '응답 수': [counts[c] for c in categories_raw],
         '비율 (%)': [percent[c] for c in categories_raw]
-    }, index=categories).T
+    }, index=[wrap_label(c,10) for c in categories]).T
 
-    # 역순으로 컬럼 뒤집기
+    # 역순 컬럼 반영 (표에서는 기존 요구대로)
     table_df = table_df[table_df.columns[::-1]]
-
-    table_fig = go.Figure(go.Table(
-        header=dict(values=[""] + list(table_df.columns), align='center'),
-        cells=dict(values=[table_df.index] + [table_df[col].tolist() for col in table_df.columns], align='center')
-    ))
-    table_fig.update_layout(height=120, margin=dict(t=10, b=5))
-    return fig, table_fig 
+    return fig, table_df
 
 # ─────────────────────────────────────────────────────
 # Q1~Q9-D: 7점 척도 스택형 바 + Table
@@ -374,7 +344,7 @@ def show_short_answer_keyword_analysis(df_result):
 
 #-----------------------------------------------------------------------------
 #페이지 구분
-def page_home(df):
+with main_tabs[0]:
     st.subheader("👤 인구통계 문항 (SQ1 ~ 5 / BQ1 ~ 2)")
     soc_qs = [c for c in df.columns if c.startswith("SQ") or c.startswith("BQ")]
     for q in soc_qs:
@@ -388,10 +358,11 @@ def page_home(df):
             else:
                 bar, table_df = plot_categorical_stacked_bar(df, q)
             st.plotly_chart(bar, use_container_width=True)
-            show_table(table_df, q)
+            show_table(table_df, q)  # 또는 st.dataframe(table_df) 직접 사용
             st.divider()
         except Exception as e:
             st.error(f"{q} 에러: {e}")
+
 
 def page_basic_vis(df):
     st.subheader("📈 7점 척도 만족도 문항 (Q1 ~ Q8)")
