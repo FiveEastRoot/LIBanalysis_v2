@@ -1352,44 +1352,50 @@ def infer_time_satisfaction_column(df):
             return c
     return None
 
-# --- 전략 인사이트(기본) 시각화 --------------------------------
-def show_basic_strategy_insights(df):
-    st.subheader("1. 이용 목적 (DQ4 계열) × 전반 만족도 (중분류 기준 레이더)")
-    purpose_col = infer_dq4_primary_column(df)
-    if purpose_col is None:
-        st.warning("이용 목적 관련 컬럼(DQ4 계열)을 찾을 수 없어 전반 만족도 대비 레이더를 그릴 수 없습니다.")
-    else:
-        overall_mid_scores = compute_midcategory_scores(df)
-        midcats = list(overall_mid_scores.index)
-        purposes = df[purpose_col].dropna().astype(str).unique()
-        for purpose in purposes:
-            subset = df[df[purpose_col].astype(str) == purpose]
-            if len(subset) < 5:
-                continue
-            purpose_scores = compute_midcategory_scores(subset)
-            vals = [purpose_scores.get(m, overall_mid_scores.get(m, 0)) for m in midcats]
-            overall_vals = [overall_mid_scores.get(m, 0) for m in midcats]
-            fig = go.Figure()
-            fig.add_trace(go.Scatterpolar(
-                r=vals + [vals[0]],
-                theta=midcats + [midcats[0]],
-                fill='toself',
-                name=f"{purpose}"
-            ))
-            fig.add_trace(go.Scatterpolar(
-                r=overall_vals + [overall_vals[0]],
-                theta=midcats + [midcats[0]],
-                fill=None,
-                name="전체 평균",
-                line=dict(dash='dash')
-            ))
-            fig.update_layout(
-                polar=dict(radialaxis=dict(range=[50, 100])),
-                title=f"이용 목적 '{purpose}' vs 전체 평균 중분류 만족도",
-                height=400,
-                showlegend=True
-            )
-            st.plotly_chart(fig, use_container_width=True)
+st.subheader("1. 이용 목적 (DQ4 계열) × 전반 만족도 (중분류 기준 레이더)")
+purpose_col = infer_dq4_primary_column(df)
+if purpose_col is None:
+    st.warning("이용 목적 관련 컬럼(DQ4 계열)을 찾을 수 없어 전반 만족도 대비 레이더를 그릴 수 없습니다.")
+else:
+    overall_mid_scores = compute_midcategory_scores(df)
+    midcats = list(overall_mid_scores.index)
+    # 목적별 sample size 계산해서 내림차순, 상위 N개만
+    purpose_counts = df[purpose_col].dropna().astype(str).value_counts()
+    top_n = 5
+    top_purposes = purpose_counts.nlargest(top_n).index.tolist()
+
+    fig = go.Figure()
+    # 전체 평균 한 번
+    overall_vals = [overall_mid_scores.get(m, 0) for m in midcats]
+    fig.add_trace(go.Scatterpolar(
+        r=overall_vals + [overall_vals[0]],
+        theta=midcats + [midcats[0]],
+        fill=None,
+        name="전체 평균",
+        line=dict(dash='dash', width=2)
+    ))
+
+    for purpose in top_purposes:
+        subset = df[df[purpose_col].astype(str) == purpose]
+        if len(subset) < 5:
+            continue
+        purpose_scores = compute_midcategory_scores(subset)
+        vals = [purpose_scores.get(m, overall_mid_scores.get(m, 0)) for m in midcats]
+        fig.add_trace(go.Scatterpolar(
+            r=vals + [vals[0]],
+            theta=midcats + [midcats[0]],
+            fill='toself',
+            name=f"{purpose} (n={int(purpose_counts[purpose])})",
+            hovertemplate="%{theta}: %{r:.1f}<extra></extra>"
+        ))
+
+    fig.update_layout(
+        polar=dict(radialaxis=dict(range=[50, 100])),
+        title=f"상위 {len(top_purposes)}개 이용 목적별 중분류 만족도 vs 전체 평균",
+        height=450,
+        showlegend=True
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("2. 이용 목적 (DQ4 계열) × 세부 항목 효과 (Q6-B 계열)")
     q6b_cols = [c for c in df.columns if c.startswith("Q6-B")]
