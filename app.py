@@ -1496,12 +1496,10 @@ def show_basic_strategy_insights(df):
                 y="서비스별 만족도",
                 color="주이용서비스",
                 barmode="group",
-                facet_row=None,
                 title="주이용서비스별 중분류 만족도 비교",
                 text="서비스별 만족도"
             )
-            # overlay overall average as line per midcategory (shared)
-            # prepare average line per midcategory
+            # overlay overall average as line per midcategory
             avg_df = plot_df.drop_duplicates(subset=["중분류"])[["중분류", "전체 평균"]]
             fig.add_trace(go.Scatter(
                 x=avg_df["중분류"],
@@ -1511,7 +1509,11 @@ def show_basic_strategy_insights(df):
                 line=dict(dash="dash"),
                 hovertemplate="%{x}: %{y:.1f}<extra></extra>"
             ))
-            fig.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+            # bar 트레이스에만 라벨 포맷 적용
+            for trace in fig.data:
+                if getattr(trace, "type", None) == "bar":
+                    trace.texttemplate = '%{text:.1f}'
+                    trace.textposition = 'outside'
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("주이용서비스별로 비교할 충분한 데이터가 없습니다.")
