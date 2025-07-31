@@ -1143,11 +1143,41 @@ def page_segment_analysis(df):
         c.startswith("SQ2") and "GROUP" not in c  # SQ2 중 SQ2_GROUP 아니면 제거
         ) or (c == "DQ2_YEARS")  # (예시: DQ2 년수도 마찬가지)
     ]
-    counts_for_display = counts.drop(columns=drop_cols, errors='ignore')
+ # 1. 각 세그먼트별 중분류별 평균점수 집계 (group_means DataFrame)
+    midcats = list(MIDCAT_MAP.keys())
+    group_means = []
 
-    st.markdown("#### 세그먼트 조합별 응답자 수")
-    st.dataframe(counts_for_display, use_container_width=True)
+    for idx, row in counts.iterrows():
+        key = tuple(row[c] for c in segment_cols)
+        gdf = group.get_group(key)
+        means = {}
+        for cat, prefix in MIDCAT_MAP.items():
+            cols = [c for c in gdf.columns if c.startswith(prefix)]
+            if not cols:
+                means[cat] = None
+                continue
+            vals = gdf[cols].apply(pd.to_numeric, errors="coerce")
+            mean_val = 100 * (vals.mean(axis=1, skipna=True) - 1) / 6
+            means[cat] = round(mean_val.mean(), 2)
+        # 세그먼트 키 정보와 함께 저장
+        seg_info = {col: row[col] for col in segment_cols}
+        seg_info.update(means)
+        group_means.append(seg_info)
 
+        group_means = pd.DataFrame(group_means) 
+
+    # 2. 행별 중분류 평균, 전체평균대비편차 추가
+    group_means["중분류평균"] = group_means[midcats].mean(axis=1).round(2)
+    overall_means = group_means[midcats].mean(axis=0)
+    overall_mean_of_means = overall_means.mean()
+    group_means["전체평균대비편차"] = (group_means["중분류평균"] - overall_mean_of_means).round(2)
+
+    # 3. 표 컬럼 순서 정렬
+    table_cols = segment_cols + midcats + ["중분류평균", "전체평균대비편차"]
+    table_with_stats = group_means[table_cols]
+
+    st.markdown("#### 세그먼트별 중분류 만족도 (평균 및 전체편차 포함)")
+    st.dataframe(table_with_stats, use_container_width=True)
 
 # ─────────────────────────────────────────────────────
 # 실행 엔트리
