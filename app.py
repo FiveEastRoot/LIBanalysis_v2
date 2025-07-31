@@ -249,7 +249,7 @@ def split_keywords_simple(text):
     parts = re.split(r"[.,/\s]+", text)
     return [p.strip() for p in parts if len(p.strip()) > 1]
 
-# 통합 추출: 키워드 + 대상범주
+# 통합 추출: 키워드 +대상범주
 @st.cache_data(show_spinner=False)
 def extract_keyword_and_audience(responses, batch_size=20):  # 배치 크기 증가로 호출 횟수 감소:  # 배치 크기 축소로 응답 지연 개선  # 배치 크기 축소로 응답 지연 개선
     results = []
