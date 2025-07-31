@@ -1107,6 +1107,7 @@ def page_segment_analysis(df):
 
     # 1. 세그먼트별 중분류별 평균점수 집계
     midcats = list(MIDCAT_MAP.keys())
+# 1. group_means 생성 (기존과 동일)
     group_means = []
     for idx, row in counts.iterrows():
         key = tuple(row[c] for c in segment_cols)
@@ -1122,46 +1123,28 @@ def page_segment_analysis(df):
             means[cat] = round(mean_val.mean(), 2)
         seg_info = {col: row[col] for col in segment_cols}
         seg_info.update(means)
+        seg_info['응답자수'] = row['응답자수']  # ← 응답자 수 추가!
         group_means.append(seg_info)
     group_means = pd.DataFrame(group_means)
 
-    # 2. 행별 중분류 평균, 전체평균대비편차 추가
+    # 2. 행별 평균, 전체평균 대비 편차 추가
+    midcats = list(MIDCAT_MAP.keys())
     group_means["중분류평균"] = group_means[midcats].mean(axis=1).round(2)
     overall_means = group_means[midcats].mean(axis=0)
     overall_mean_of_means = overall_means.mean()
     group_means["전체평균대비편차"] = (group_means["중분류평균"] - overall_mean_of_means).round(2)
 
-    # 3. 숫자 세그먼트 컬럼 제거(나이 등)
-    segment_cols_filtered = [
-        c for c in segment_cols
-        if not (c.startswith("SQ2") and "GROUP" not in c) and c != "DQ2_YEARS"
-    ]
-    table_cols = segment_cols_filtered + midcats + ["중분류평균", "전체평균대비편차"]
+    # 3. 컬럼 정렬: 세그먼트+중분류+평균+편차+응답자수
+    table_cols = segment_cols + midcats + ["중분류평균", "전체평균대비편차", "응답자수"]
     table_with_stats = group_means[table_cols]
 
-    # 4. 히트맵 시각화
-    show_segment_heatmap(group_means, segment_cols_filtered, midcats)
-
-    # 5. 표
-    st.markdown("#### 세그먼트별 중분류 만족도 (평균 및 전체편차 포함)")
-    st.dataframe(table_with_stats, use_container_width=True)
-
-    # 6. 응답자수 표 (필요시)
-    drop_cols = [c for c in counts.columns if (
-        c.startswith("SQ2") and "GROUP" not in c
-    ) or (c == "DQ2_YEARS")]
-    counts_for_display = counts.drop(columns=drop_cols, errors='ignore')
-    st.markdown("#### 세그먼트 조합별 응답자 수")
-    st.dataframe(counts_for_display, use_container_width=True)
-
-
-# ---- 히트맵 그리기 함수 분리 ----
-def show_segment_heatmap(group_means, segment_cols, midcats):
+    # 4. 세로축 라벨: 문항명 없이 응답만
     def row_label(row):
         return " | ".join([str(row[col]) for col in segment_cols])
-    heatmap_df = group_means.copy()
-    heatmap_df["조합"] = heatmap_df.apply(row_label, axis=1)
-    heatmap_plot = heatmap_df.set_index("조합")[midcats]
+    group_means["조합"] = group_means.apply(row_label, axis=1)
+    heatmap_plot = group_means.set_index("조합")[midcats]
+
+    # 5. 히트맵 시각화
     fig = px.imshow(
         heatmap_plot,
         text_auto=True,
@@ -1173,6 +1156,11 @@ def show_segment_heatmap(group_means, segment_cols, midcats):
     )
     fig.update_layout(height=300 + 24*len(heatmap_plot), yaxis_nticks=min(len(heatmap_plot), 30))
     st.plotly_chart(fig, use_container_width=True)
+
+    # 6. 통합 표 한 번에 출력
+    st.markdown("#### 세그먼트 조합별 중분류별 만족도 및 응답자수")
+    st.dataframe(table_with_stats, use_container_width=True)
+
 
 
 # ─────────────────────────────────────────────────────
