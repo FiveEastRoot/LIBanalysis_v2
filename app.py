@@ -202,16 +202,13 @@ def plot_stacked_bar_with_table(df, question):
         yaxis=dict(showticklabels=False), height=180, margin=dict(t=40,b=2)
     )
 
-    table_df = pd.DataFrame({
-        '응답 수': [int(counts[v]) for v in order],
-        '비율 (%)': [percent[v] for v in order]
-    }, index=[f"{v}점" for v in order]).T
-    table_fig = go.Figure(go.Table(
-        header=dict(values=[""] + list(table_df.columns), align='center'),
-        cells=dict(values=[table_df.index] + [table_df[c].tolist() for c in table_df.columns], align='center')
-    ))
-    table_fig.update_layout(height=80, margin=dict(t=10,b=0))
-    return fig, table_fig
+    # SQ2 방식처럼 DataFrame으로 반환
+    table_df = pd.DataFrame(
+        [counts.values, percent.values],
+        index=["응답 수", "비율 (%)"],
+        columns=[f"{v}점" for v in order]
+    )
+    return fig, table_df
 
 
 #--------------------------------------------------------------------------
@@ -382,13 +379,10 @@ def page_home(df):
 
 def page_basic_vis(df):
     st.subheader("📈 7점 척도 만족도 문항 (Q1 ~ Q8)")
-    # ─── likert_qs 수정 ───
     likert_qs = [
         col for col in df.columns
         if (re.match(r"Q[1-9][\.-]", str(col)))  # Q1-, Q1. 모두 매칭
     ]
-    # ─────────────────────
-
     section_mapping = {
         "공간 및 이용편의성":       [q for q in likert_qs if q.startswith("Q1-")],
         "정보 획득 및 활용":       [q for q in likert_qs if q.startswith("Q2-")],
@@ -398,18 +392,17 @@ def page_basic_vis(df):
         "개인의 삶과 역량":       [q for q in likert_qs if q.startswith("Q6-")],
         "도서관의 공익성 및 기여도": [
             q for q in likert_qs 
-            if q.startswith("Q7-") or q.startswith("Q8")  # 이제 Q8. 문항도 포함
+            if q.startswith("Q7-") or q.startswith("Q8")
         ]
     }
-
-    tabs = st.tabs(list(section_mapping.keys()))
-    for tab, section_name in zip(tabs, section_mapping.keys()):
+    tabs2 = st.tabs(list(section_mapping.keys()))
+    for tab, section_name in zip(tabs2, section_mapping.keys()):
         with tab:
             st.markdown(f"### {section_name}")
             for q in section_mapping[section_name]:
-                bar, tbl = plot_stacked_bar_with_table(df, q)
+                bar, table_df = plot_stacked_bar_with_table(df, q)
                 st.plotly_chart(bar, use_container_width=True)
-                st.plotly_chart(tbl, use_container_width=True)
+                show_table(table_df, q)
 
 #------------- 단문분석
 def page_short_keyword(df):
