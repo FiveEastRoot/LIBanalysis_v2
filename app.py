@@ -488,33 +488,44 @@ def plot_midcategory_radar(df):
     )
     return fig
 
-def plot_within_category_bar(df, midcategory):
+def plot_within_category_bar(df, midcategory, wrap_width=20):
     item_scores = compute_within_category_item_scores(df)
     if midcategory not in item_scores:
         return None, None
     predicate = MIDDLE_CATEGORY_MAPPING[midcategory]
     orig_cols = [c for c in df.columns if predicate(c)]
-    orig_cols_rev = orig_cols[::-1]
-    series_plot = item_scores[midcategory].reindex(orig_cols_rev)
+    if not orig_cols:
+        return None, None
+
+    # 원본 순서대로 (역순은 시각화용)
+    series_plot = item_scores[midcategory].reindex(orig_cols[::-1])
     series_table = item_scores[midcategory].reindex(orig_cols)
     mid_scores = compute_midcategory_scores(df)
     mid_mean = mid_scores.get(midcategory, None)
 
-    fig = go.Figure(go.Bar(
+    # 줄바꿈된 라벨 (y축)
+    wrapped_labels = [wrap_label(label, width=wrap_width) for label in series_plot.index]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
         x=series_plot.values,
-        y=series_plot.index,
+        y=wrapped_labels,  # 줄바꿈된 라벨
         orientation='h',
         text=series_plot.round(1),
         textposition='outside',
-        marker_color='steelblue'
+        marker_color='steelblue',
+        hovertemplate="<b>%{customdata}</b><br>평균 점수: %{x:.1f}<extra></extra>",
+        customdata=series_plot.index  # 원래 라벨을 hover에
     ))
     if mid_mean is not None:
-        fig.add_vline(x=mid_mean, line_color="red")
+        fig.add_vline(x=mid_mean, line_color="red", annotation_text=f"중분류 평균: {mid_mean:.1f}", annotation_position="top right")
     fig.update_layout(
         title=f"{midcategory} 내 문항별 평균 점수 비교 (0~100 환산)",
         xaxis_title=f"{midcategory} 평균 {mid_mean:.2f}" if mid_mean is not None else "평균 점수",
-        margin=dict(t=40, b=60)
+        margin=dict(t=40, b=60),
+        height= (50 + 30 * len(wrapped_labels))  # 항목 수에 따라 높이 자동 확장
     )
+
     if mid_mean is not None:
         diff = series_table - mid_mean
         table_df = pd.DataFrame({
