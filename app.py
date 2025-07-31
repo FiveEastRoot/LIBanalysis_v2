@@ -1381,7 +1381,7 @@ def show_basic_strategy_insights(df):
                 fill=None,
                 name="전체 평균",
                 line=dict(dash='dash', width=2),
-                opacity=0.8
+                opacity=1
             ))
 
             colors = px.colors.qualitative.Plotly
@@ -1394,7 +1394,7 @@ def show_basic_strategy_insights(df):
                 fig.add_trace(go.Scatterpolar(
                     r=vals + [vals[0]],
                     theta=midcats + [midcats[0]],
-                    fill='toself',
+                    fill=None,
                     name=f"{purpose} (n={int(purpose_counts[purpose])})",
                     hovertemplate="%{theta}: %{r:.1f}<extra></extra>",
                     marker=dict(color=colors[i % len(colors)]),
