@@ -750,6 +750,7 @@ def plot_pair_bar(df, prefix):
     ))
     table_fig.update_layout(height=250, margin=dict(t=10, b=10))
     return fig, table_fig, question
+
 # ------------------ Likert 스케일 변환 / 중분류 정의 ------------------
 def scale_likert(series):
     return 100 * (pd.to_numeric(series, errors='coerce') - 1) / 6
@@ -845,11 +846,10 @@ def plot_within_category_bar(df, midcategory):
         marker_color='steelblue'
     ))
     if mid_mean is not None:
-        fig.add_vline(x=mid_mean, line_dash="dash", line_color="red",
-                      annotation_text=f"중분류 평균 {mid_mean:.2f}", annotation_position="top right")
+        fig.add_vline(x=mid_mean, line_color="red")
     fig.update_layout(
         title=f"{midcategory} 내 문항별 평균 점수 비교 (0~100 환산)",
-        xaxis_title="평균 점수",
+        xaxis_title=f"{midcategory} 평균 {mid_mean:.2f}",
         height=300,
         margin=dict(t=40, b=60)
     )
@@ -876,7 +876,7 @@ def plot_within_category_bar(df, midcategory):
             align='center'
         )
     ))
-    table_fig.update_layout(margin=dict(t=5, b=5),height=700)
+    table_fig.update_layout(margin=dict(t=5, b=5),height=500)
     return fig, table_fig, table_df
 
 # ─────────────────────────────────────────────────────
