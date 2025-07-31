@@ -489,7 +489,7 @@ def plot_midcategory_radar(df):
     return fig
 
 
-def wrap_label_fixed(label: str, width: int = 20) -> str:
+def wrap_label_fixed(label: str, width: int = 30) -> str:
     # 한 줄에 공백 포함 정확히 width 글자씩 자르고 <br>로 연결
     parts = [label[i:i+width] for i in range(0, len(label), width)]
     return "<br>".join(parts)
