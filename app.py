@@ -936,16 +936,6 @@ def plot_abc_grouped_bar(df_mean):
 #이용자 세그먼트 분석
 #------------------------------
 
-# ──────────────────────────────────────────────
-# 1. 유틸리티 및 시각화 관련 (기존 함수와 동일)
-# ──────────────────────────────────────────────
-def get_qualitative_colors(n):
-    palette = px.colors.qualitative.Plotly
-    return [c for _, c in zip(range(n), cycle(palette))]
-
-def wrap_label_fixed(label: str, width: int = 24) -> str:
-    parts = [label[i:i+width] for i in range(0, len(label), width)]
-    return "<br>".join(parts)
 
 CATEGORY_MAP = {
     "공간 및 이용편의성": "Q1",
@@ -955,10 +945,6 @@ CATEGORY_MAP = {
     "사회적 관계 형성": "Q5",
     "개인의 삶과 역량": "Q6",
 }
-
-# ──────────────────────────────────────────────
-# 2. 세그먼트 조건 옵션 (SQ1~5, DQ1, DQ2, DQ4(1순위))
-# ──────────────────────────────────────────────
 SEGMENT_OPTIONS = [
     {"label": "SQ1. 성별", "col": "SQ1"},
     {"label": "SQ2. 연령", "col": "SQ2"},
@@ -969,38 +955,18 @@ SEGMENT_OPTIONS = [
     {"label": "DQ2. 도서관 이용 기간", "col": "DQ2"},
     {"label": "DQ4(1순위) 이용목적", "col": "DQ4"},
 ]
+DERIVED_COLS = {
+    "DQ1": "DQ1_FREQ",
+    "DQ2": "DQ2_YEARS",
+    "DQ4": "DQ4_1ST",
+}
 
-def get_segment_options():
-    return SEGMENT_OPTIONS
+def get_qualitative_colors(n):
+    palette = px.colors.qualitative.Plotly
+    return [c for _, c in zip(range(n), cycle(palette))]
 
-def get_segment_columns(df, key):
-    """key(문항번호)가 컬럼명에 포함만 되어도 모두 반환 (DQ4는 '1순위' 필수)"""
-    if key == "DQ4":
-        return [col for col in df.columns if ("DQ4" in col) and ("1순위" in col)]
-    else:
-        return [col for col in df.columns if key in col]
-
-def build_segment_df(df, selected_keys):
-    """선택된 key(문항번호)들로 세그먼트용 데이터프레임 반환 (문항번호 포함만 되면 OK)"""
-    seg_cols = []
-    for key in selected_keys:
-        cols = get_segment_columns(df, key)
-        if not cols:
-            st.warning(f"'{key}'에 해당하는 컬럼이 데이터에 없습니다.")
-        seg_cols.extend(cols)
-    if not seg_cols:
-        st.error("세그먼트 분석에 사용할 컬럼이 없습니다.")
-        st.stop()
-    seg_df = df[seg_cols].copy()
-    for col in seg_cols:
-        seg_df[col] = seg_df[col].astype(str)
-    return seg_df, seg_cols
-
-# ──────────────────────────────────────────────
-# 3. 전처리: DQ1/DQ2 범주화, DQ4 1순위 처리 (문항번호 부분일치도 허용)
-# ──────────────────────────────────────────────
-def preprocess_for_segmentation(df):
-    # DQ1: 월평균 이용 → 연간 환산 후 범주화 (컬럼명에 'DQ1' 포함이면 동작)
+def preprocess_for_segmentation(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
     dq1_cols = [c for c in df.columns if "DQ1" in c]
     if dq1_cols:
         dq1_col = dq1_cols[0]
@@ -1009,68 +975,43 @@ def preprocess_for_segmentation(df):
         bins = [0,12,24,48,72,144,1e10]
         labels = ["0~11회: 연 1회 미만", "12~23회: 월 1회", "24~47회: 월 2~4회", "48~71회: 주 1회", "72~143회: 주 2~3회", "144회 이상: 거의 매일"]
         df["DQ1_FREQ"] = pd.cut(yearly, bins=bins, labels=labels, right=False)
-    # DQ2: 이용기간 → 년수로 통일 (컬럼명에 'DQ2' 포함이면 동작)
     dq2_cols = [c for c in df.columns if "DQ2" in c]
     if dq2_cols:
         dq2_col = dq2_cols[0]
         def parse_years(s):
-            s = str(s)
-            m = re.match(r'^(\d+)\s*년\s*(\d+)\s*개월$', s)
-            if m: return int(m.group(1)) + (1 if int(m.group(2))>0 else 0)
-            m = re.match(r'^(\d+)\s*년$', s)
-            if m: return int(m.group(1))
-            m = re.match(r'^(\d+)\s*개월$', s)
-            if m: return 1
-            return None
+            try:
+                s = str(s)
+                if not s or pd.isnull(s): return None
+                m = re.match(r'^(\d+)\s*년\s*(\d+)\s*개월$', s)
+                if m: return int(m.group(1)) + (1 if int(m.group(2)) > 0 else 0)
+                m = re.match(r'^(\d+)\s*년$', s)
+                if m: return int(m.group(1))
+                m = re.match(r'^(\d+)\s*개월$', s)
+                if m: return 1
+                m = re.match(r'^(\d+)$', s)
+                if m: return 1
+            except Exception:
+                return None
         years = df[dq2_col].dropna().apply(parse_years)
         df["DQ2_YEARS"] = years
-    # DQ4: (1순위) 텍스트 포함 컬럼만 추출 (컬럼명에 'DQ4'와 '1순위' 포함이면 동작)
     dq4_cols = [c for c in df.columns if ("DQ4" in c) and ("1순위" in c)]
     if dq4_cols:
         df["DQ4_1ST"] = df[dq4_cols[0]]
     return df
 
-# ──────────────────────────────────────────────
-# 4. 세그먼트별 그룹 집계 및 필터 (5명 이상 그룹만)
-# ──────────────────────────────────────────────
+def map_segment_cols(selected_keys, df_columns):
+    mapped = [DERIVED_COLS.get(key, key) for key in selected_keys]
+    return [c for c in mapped if c in df_columns]
+
 def get_segment_combinations(df, seg_cols):
     if not seg_cols:
         return None, None
-    group = df.groupby(seg_cols)
+    group = df.groupby(seg_cols, dropna=False)
     counts = group.size().reset_index(name="응답자수")
     counts = counts[counts["응답자수"] >= 5]
     return counts, group
 
-# ──────────────────────────────────────────────
-# 문항번호 포함 매칭 유틸 (DQ4는 1순위도 체크)
-# ──────────────────────────────────────────────
-def get_segment_columns(df, key):
-    if key == "DQ4":
-        return [col for col in df.columns if ("DQ4" in col) and ("1순위" in col)]
-    else:
-        return [col for col in df.columns if key in col]
-
-def build_segment_df(df, selected_keys):
-    seg_cols = []
-    for key in selected_keys:
-        cols = get_segment_columns(df, key)
-        if not cols:
-            st.warning(f"'{key}'에 해당하는 컬럼이 데이터에 없습니다.")
-        seg_cols.extend(cols)
-    if not seg_cols:
-        st.error("세그먼트 분석에 사용할 컬럼이 없습니다.")
-        st.stop()
-    seg_df = df[seg_cols].copy()
-    for col in seg_cols:
-        seg_df[col] = seg_df[col].astype(str)
-    return seg_df, seg_cols
-# ──────────────────────────────────────────────
-# 5. 세그먼트별 중분류 만족도 평균 계산 및 레이더차트
-# ──────────────────────────────────────────────
 def plot_segment_radar_by_category(df, seg_cols, group_counts, group):
-    """
-    세그먼트별(조합별) 중분류 만족도 레이더차트 (동일 축, 그룹별 선)
-    """
     midcats = list(CATEGORY_MAP.keys())
     fig = go.Figure()
     colors = get_qualitative_colors(len(group_counts))
@@ -1098,38 +1039,81 @@ def plot_segment_radar_by_category(df, seg_cols, group_counts, group):
     )
     return fig
 
-# ──────────────────────────────────────────────
-# 6. 스트림릿 페이지 함수 (심화분석 탭)
-# ──────────────────────────────────────────────
 def page_segment_analysis(df):
     st.header("🧩 이용자 세그먼트 조합 분석")
-    st.markdown("원하는 조건(문항) **최대 3개**를 선택해 세그먼트별 중분류 만족도 비교를 할 수 있습니다. (응답자 5명 이상만 표시)")
+    st.markdown("조건(문항) **최대 3개** 선택 → 세그먼트별 중분류 만족도 비교 (응답자 5명 이상만 표시)")
 
-    seg_options = get_segment_options()
-    seg_labels = [o["label"] for o in seg_options]
-    default_sel = [seg_labels[0], seg_labels[1]]  # 기본값 예시 (성별+연령)
+    seg_labels = [o["label"] for o in SEGMENT_OPTIONS]
+    default_sel = [seg_labels[0], seg_labels[1]]
 
     sel = st.multiselect(
         "세그먼트 조건 (최대 3개)", options=seg_labels,
         default=default_sel, max_selections=3
     )
-    seg_cols = [o["col"] for o in seg_options if o["label"] in sel]
-
-    if not seg_cols:
+    if not sel:
         st.info("최소 1개 이상의 세그먼트 조건을 선택하세요.")
         return
 
     df2 = preprocess_for_segmentation(df)
+    seg_cols_selected = [o["col"] for o in SEGMENT_OPTIONS if o["label"] in sel]
+    seg_cols = map_segment_cols(seg_cols_selected, df2.columns)
+    if not seg_cols:
+        st.error("선택한 조건에 해당하는 데이터 컬럼이 없습니다.")
+        return
+
     counts, group = get_segment_combinations(df2, seg_cols)
     if counts is None or counts.empty:
         st.warning("응답자 5명 이상인 세그먼트 조합이 없습니다.")
         return
 
+    # 1. 레이더 차트
     st.subheader("중분류별 만족도 레이더 차트")
     fig = plot_segment_radar_by_category(df2, seg_cols, counts, group)
     st.plotly_chart(fig, use_container_width=True)
+
     st.markdown("#### 세그먼트 조합별 응답자 수")
-    st.dataframe(counts)
+    st.dataframe(counts, use_container_width=True)
+
+    # 2. (추가) 세그먼트 조합별 중분류별 평균 막대그래프 및 테이블
+    st.subheader("세그먼트 조합별 중분류별 평균값 (Bar)")
+    midcats = list(CATEGORY_MAP.keys())
+    # 데이터 구조: [세그먼트조합, 중분류, 평균값]
+    bar_data = []
+    for idx, row in counts.iterrows():
+        key = tuple(row[c] for c in seg_cols)
+        group_df = group.get_group(key)
+        means = []
+        for cat, prefix in CATEGORY_MAP.items():
+            cols = [c for c in group_df.columns if c.startswith(prefix+"-")]
+            if not cols:
+                means.append(None)
+                continue
+            vals = group_df[cols].apply(pd.to_numeric, errors="coerce")
+            mean_val = 100 * (vals.mean(axis=1, skipna=True) - 1) / 6
+            means.append(round(mean_val.mean(), 2))
+        combo_label = ", ".join([f"{col}: {row[col]}" for col in seg_cols])
+        for cat, val in zip(midcats, means):
+            bar_data.append({"조합": combo_label, "중분류": cat, "평균값": val})
+
+    bar_df = pd.DataFrame(bar_data)
+    if not bar_df.empty:
+        fig2 = px.bar(
+            bar_df,
+            x="중분류",
+            y="평균값",
+            color="조합",
+            barmode="group",
+            height=480,
+            text="평균값",
+            title="세그먼트 조합별 중분류별 평균값 (Bar Chart)"
+        )
+        fig2.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+        fig2.update_yaxes(range=[0,100])
+        st.plotly_chart(fig2, use_container_width=True)
+        st.markdown("#### 세그먼트별 중분류 평균값 상세 테이블")
+        st.dataframe(bar_df)
+    else:
+        st.info("세그먼트 조합별 중분류 평균 데이터가 없습니다.")
 
 
 # ─────────────────────────────────────────────────────
