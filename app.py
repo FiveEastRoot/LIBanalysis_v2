@@ -954,6 +954,7 @@ MIDCAT_MAP = {
     "사회적 관계 형성": "Q5-",
     "개인의 삶과 역량": "Q6-",
     "자치구 구성 문항": "Q9-D-3",
+    "공익성 및 기여도": ["Q7-", "Q8-"],   # <- Q7과 Q8을 하나로 합침!
 }
 COLOR_CYCLER = cycle(px.colors.qualitative.Plotly)
 
