@@ -927,35 +927,29 @@ with main_tabs[3]:
     st.header("📊 도서관 이용양태 분석")
     # 하위 탭: DQ1~5, DQ6 계열
     sub_tabs = st.tabs(["DQ1~5","DQ6 계열"])
+def show_chart_and_table(fig, table, title):
+    if fig is not None:
+        st.subheader(title)
+        st.plotly_chart(fig, use_container_width=True)
+    if table is not None:
+        # table이 DataFrame이면 이렇게
+        st.dataframe(table)
 
-    # --- DQ1~5 탭 ---
-    with sub_tabs[0]:
-        # DQ1~DQ2~DQ3~DQ4 기존 구현
-        fig1, tbl1, q1 = plot_dq1(df)
-        if fig1: 
-            st.subheader(q1)
-            st.plotly_chart(fig1, use_container_width=True)
-            st.plotly_chart(tbl1, use_container_width=True)
-        fig2, tbl2, q2 = plot_dq2(df)
-        if fig2: 
-            st.subheader(q2); 
-            st.plotly_chart(fig2, use_container_width=True)
-            st.plotly_chart(tbl2, use_container_width=True)
-        fig3, tbl3, q3 = plot_dq3(df)
-        if fig3:
-            st.subheader(q3)
-            st.plotly_chart(fig3, use_container_width=True)
-            st.dataframe(tbl3)        
-        fig4, tbl4, q4 = plot_dq4_bar(df)
-        if fig4: 
-            st.subheader(q4); 
-            st.plotly_chart(fig4, use_container_width=True)
-            st.plotly_chart(tbl4, use_container_width=True)
-        fig5, tbl5, q5 = plot_dq5(df)
-        if fig5: 
-            st.subheader(q5)
-            st.plotly_chart(fig5, use_container_width=True)
-            st.plotly_chart(tbl5, use_container_width=True)
+with sub_tabs[0]:
+    fig1, tbl1, q1 = plot_dq1(df)
+    show_chart_and_table(fig1, tbl1, q1)
+
+    fig2, tbl2, q2 = plot_dq2(df)
+    show_chart_and_table(fig2, tbl2, q2)
+
+    fig3, tbl3, q3 = plot_dq3(df)
+    show_chart_and_table(fig3, tbl3, q3)
+
+    fig4, tbl4, q4 = plot_dq4_bar(df)
+    show_chart_and_table(fig4, tbl4, q4)
+
+    fig5, tbl5, q5 = plot_dq5(df)
+    show_chart_and_table(fig5, tbl5, q5)
 
 
     # --- DQ6 계열 탭 ---
