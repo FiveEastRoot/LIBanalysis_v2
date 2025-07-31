@@ -715,8 +715,8 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
     likert_df = likert_df.reindex(columns=range(1,8))
 
     fig = go.Figure()
-    neg_scores = [3,2,1]
-    neg_colors = ["#91bfdb","#4575b4","#313695"]
+    neg_scores = [4,3,2,1]
+    neg_colors = ["#dddddd","#91bfdb","#4575b4","#313695"]
     for score, color in zip(neg_scores, neg_colors):
         fig.add_trace(go.Bar(
             y=likert_df.index,
@@ -727,12 +727,12 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
         ))
     fig.add_trace(go.Bar(
         y=likert_df.index,
-        x=likert_df[4],
-        name="4점",
+        x=likert_df[5],
+        name="5점",
         orientation='h',
-        marker_color="#dddddd"
+        marker_color="#fee090"
     ))
-    for score, color in zip([5,6,7],["#fee090","#fc8d59","#d73027"]):
+    for score, color in zip([6,7],["#fc8d59","#d73027"]):
         fig.add_trace(go.Bar(
             y=likert_df.index,
             x=likert_df[score],
