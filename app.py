@@ -787,6 +787,16 @@ def compute_within_category_item_scores(df):
         item_scores[mid] = item_means
     return item_scores
 
+# 중분류별 평균값 표 생성 (소수점 둘째자리)
+def midcategory_avg_table(df):
+    s = compute_midcategory_scores(df)
+    if s.empty:
+        return pd.DataFrame()
+    tbl = s.rename("평균 점수(0~100)").to_frame().reset_index().rename(columns={"index": "중분류"})
+    tbl["평균 점수(0~100)"] = tbl["평균 점수(0~100)"].round(2)
+    return tbl
+
+
 # ------------------ 시각화: 심화 분석 ------------------
 
 def plot_midcategory_radar(df):
