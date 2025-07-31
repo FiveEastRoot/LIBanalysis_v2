@@ -1089,10 +1089,11 @@ with main_tabs[6]:
             if tbl is not None:
                 st.plotly_chart(tbl, use_container_width=True)
                 # 다운로드 버튼: 항목별 편차 테이블
-                csv_bytes = table_df.reset_index().rename(columns={"index": "문항"}).to_csv(index=False).encode('utf-8-sig')
+                csv_bytes = table_df.reset_index().rename(columns={"index": "문항"}).to_csv(index=False).encode('utf-8-bom')
                 st.download_button(
                     label=f"{mid} 항목별 편차 다운로드 (CSV)",
                     data=csv_bytes,
                     file_name=f"{mid.replace(' ','_')}_within_item_variance.csv",
                     mime="text/csv"
                 )
+                st.markdown("---")
