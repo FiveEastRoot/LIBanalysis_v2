@@ -953,7 +953,7 @@ MIDCAT_MAP = {
     "문화·교육 향유": "Q4-",
     "사회적 관계 형성": "Q5-",
     "개인의 삶과 역량": "Q6-",
-    "자치구 구성": "Q9-D-3",
+    "자치구 구성 문항": "Q9-D-3",
 }
 COLOR_CYCLER = cycle(px.colors.qualitative.Plotly)
 
