@@ -870,19 +870,19 @@ TYPE_MAP = {
 }
 
 def get_abc_category_means(df):
-    """중분류별 A/B/C 문항 평균값 DataFrame 반환"""
     result = []
     for cat, prefix in CATEGORY_MAP.items():
         for t in ["A", "B", "C"]:
             if t == "C":
-                cols = [c for c in df.columns if c == f"{prefix}-C"]
+                # "Q1-C" 또는 "Q1-C-"로 시작하는 모든 컬럼 포함
+                cols = [c for c in df.columns if c.startswith(f"{prefix}-C")]
             else:
                 cols = [c for c in df.columns if c.startswith(f"{prefix}-{t}-")]
             if not cols:
                 mean_val = None
             else:
                 vals = df[cols].apply(pd.to_numeric, errors='coerce')
-                mean_val = 100 * (vals.mean(axis=1, skipna=True) - 1) / 6  # 7점척도 0~100환산
+                mean_val = 100 * (vals.mean(axis=1, skipna=True) - 1) / 6
                 mean_val = mean_val.mean()
             result.append({
                 "중분류": cat,
@@ -890,6 +890,7 @@ def get_abc_category_means(df):
                 "평균값": round(mean_val, 2) if mean_val is not None else None
             })
     return pd.DataFrame(result)
+
 
 def plot_abc_radar(df_mean):
     categories = df_mean['중분류'].unique().tolist()
