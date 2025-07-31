@@ -829,10 +829,8 @@ def plot_within_category_bar(df, midcategory):
     # 원래 컬럼 순서 유지 (역순으로 표시)
     predicate = MIDDLE_CATEGORY_MAPPING[midcategory]
     orig_cols = [c for c in df.columns if predicate(c)]
-    # 역순으로
     orig_cols_rev = orig_cols[::-1]
-    series = item_scores[midcategory]
-    series = series.reindex(orig_cols_rev)
+    series = item_scores[midcategory].reindex(orig_cols_rev)
     # 중분류 전체 평균
     mid_scores = compute_midcategory_scores(df)
     mid_mean = mid_scores.get(midcategory, None)
