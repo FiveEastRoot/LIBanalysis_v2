@@ -38,6 +38,44 @@ def render_chart_and_table(bar, table, title, key_prefix=""):
         st.dataframe(table, key=f"{key_prefix}-tbl-df-{title}")
     elif table is not None:
         st.write(table, key=f"{key_prefix}-tbl-raw-{title}")
+def _sanitize_dataframe_for_streamlit(df: pd.DataFrame) -> pd.DataFrame:
+    df2 = df.copy()
+
+    # object 컬럼들에 대해 모두 문자열화 (NaN 유지)
+    for col in df2.select_dtypes(include=["object"]).columns:
+        df2[col] = df2[col].apply(lambda x: str(x) if not pd.isna(x) else x)
+
+    # 인덱스가 복잡하면 단순 문자열로 변환 (MultiIndex 포함)
+    if isinstance(df2.index, pd.MultiIndex):
+        df2.index = df2.index.map(lambda tup: " | ".join(map(str, tup)))
+    else:
+        df2.index = df2.index.map(lambda x: str(x))
+
+    # 컬럼 이름도 비표준이면 문자열로
+    df2.columns = [str(c) for c in df2.columns]
+
+    return df2
+
+def render_chart_and_table(bar, table, title, key_prefix=""):
+    if bar is not None:
+        st.plotly_chart(bar, use_container_width=True, key=f"{key_prefix}-bar-{title}")
+    if isinstance(table, go.Figure):
+        st.plotly_chart(table, use_container_width=True, key=f"{key_prefix}-tbl-fig-{title}")
+    elif isinstance(table, pd.DataFrame):
+        try:
+            safe_tbl = _sanitize_dataframe_for_streamlit(table)
+            st.dataframe(safe_tbl, key=f"{key_prefix}-tbl-df-{title}")
+        except Exception as e:
+            logging.warning(f"DataFrame rendering failed, showing head only: {e}")
+            # 샘플로라도 보여줌
+            try:
+                safe_head = _sanitize_dataframe_for_streamlit(table.head(200))
+                st.dataframe(safe_head, key=f"{key_prefix}-tbl-df-{title}-sample")
+                st.warning(f"전체 테이블 렌더링에 실패하여 상위 200개만 보여줍니다: {e}")
+            except Exception as e2:
+                st.error(f"테이블 렌더링 불가: {e2}")
+    elif table is not None:
+        st.write(table, key=f"{key_prefix}-tbl-raw-{title}")
 
 # ─────────────────────────────────────────────────────
 # SQ2: 연령 히스토그램 + 테이블
@@ -912,7 +950,7 @@ with main_tabs[5]:
         render_chart_and_table(fig9, tbl9, q9, key_prefix="weakness")
     else:
         st.warning("DQ9 문항이 없습니다.")
-        
+
 with main_tabs[6]:
     st.header("🔍 심화 분석")
     st.subheader("중분류별 전체 만족도 (레이더 차트 및 평균값)")
