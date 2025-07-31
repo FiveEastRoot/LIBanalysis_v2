@@ -806,18 +806,32 @@ def plot_midcategory_radar(df):
         return None
     categories = list(mid_scores.index)
     values = mid_scores.values.tolist()
-    categories += categories[:1]
-    values += values[:1]
-    fig = go.Figure(go.Scatterpolar(
-        r=values,
-        theta=categories,
+    # 닫기 위해 첫 항목을 다시 붙임
+    categories_closed = categories + categories[:1]
+    values_closed = values + values[:1]
+    # 중분류 평균의 전체 평균 (모든 중분류의 평균)
+    overall_mean = mid_scores.mean()
+    avg_values_closed = [overall_mean] * len(categories_closed)
+    fig = go.Figure()
+    # 중분류 만족도 영역
+    fig.add_trace(go.Scatterpolar(
+        r=values_closed,
+        theta=categories_closed,
         fill='toself',
         name='중분류 만족도'
+    ))
+    # 전체 평균 선 (평균의 평균) 붉은 실선으로 표시
+    fig.add_trace(go.Scatterpolar(
+        r=avg_values_closed,
+        theta=categories_closed,
+        fill=None,
+        name='전체 평균',
+        line=dict(color='red', dash='solid')
     ))
     fig.update_layout(
         polar=dict(radialaxis=dict(range=[0,100], tickformat=".0f")),
         title="중분류별 만족도 수준 (0~100 환산, 레이더 차트)",
-        showlegend=False,
+        showlegend=True,
         height=450,
         margin=dict(t=40, b=20)
     )
