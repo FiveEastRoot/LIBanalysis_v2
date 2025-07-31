@@ -750,7 +750,89 @@ def plot_pair_bar(df, prefix):
     ))
     table_fig.update_layout(height=250, margin=dict(t=10, b=10))
     return fig, table_fig, question
+# ------------------ Likert 스케일 변환 / 중분류 정의 ------------------
+# 7점 척도 → 0~100 변환
+def scale_likert(series):
+    return 100 * (pd.to_numeric(series, errors='coerce') - 1) / 6
 
+MIDDLE_CATEGORY_MAPPING = {
+    "공간 및 이용편의성":       lambda col: str(col).startswith("Q1-"),
+    "정보 획득 및 활용":       lambda col: str(col).startswith("Q2-"),
+    "소통 및 정책 활용":       lambda col: str(col).startswith("Q3-"),
+    "문화·교육 향유":         lambda col: str(col).startswith("Q4-"),
+    "사회적 관계 형성":       lambda col: str(col).startswith("Q5-"),
+    "개인의 삶과 역량":       lambda col: str(col).startswith("Q6-"),
+    "도서관의 공익성 및 기여도": lambda col: (str(col).startswith("Q7-") or str(col).startswith("Q8")),
+}
+
+def compute_midcategory_scores(df):
+    results = {}
+    for mid, predicate in MIDDLE_CATEGORY_MAPPING.items():
+        cols = [c for c in df.columns if predicate(c)]
+        if not cols:
+            continue
+        scaled = df[cols].apply(scale_likert)
+        mid_mean = scaled.mean(axis=0, skipna=True).mean()
+        results[mid] = mid_mean
+    return pd.Series(results).dropna()
+
+def compute_within_category_item_scores(df):
+    item_scores = {}
+    for mid, predicate in MIDDLE_CATEGORY_MAPPING.items():
+        cols = [c for c in df.columns if predicate(c)]
+        if not cols:
+            continue
+        scaled = df[cols].apply(scale_likert)
+        item_means = scaled.mean(axis=0, skipna=True)
+        item_scores[mid] = item_means
+    return item_scores
+
+# ------------------ 시각화: 심화 분석 ------------------
+
+def plot_midcategory_radar(df):
+    mid_scores = compute_midcategory_scores(df)
+    if mid_scores.empty:
+        return None
+    categories = list(mid_scores.index)
+    values = mid_scores.values.tolist()
+    categories += categories[:1]
+    values += values[:1]
+    fig = go.Figure(go.Scatterpolar(
+        r=values,
+        theta=categories,
+        fill='toself',
+        name='중분류 만족도'
+    ))
+    fig.update_layout(
+        polar=dict(radialaxis=dict(range=[0,100], tickformat=".0f")),
+        title="중분류별 만족도 수준 (0~100 환산, 레이더 차트)",
+        showlegend=False,
+        height=450,
+        margin=dict(t=40, b=20)
+    )
+    return fig
+
+
+def plot_within_category_bar(df, midcategory):
+    item_scores = compute_within_category_item_scores(df)
+    if midcategory not in item_scores:
+        return None
+    series = item_scores[midcategory].sort_values(ascending=False)
+    fig = go.Figure(go.Bar(
+        x=series.values,
+        y=series.index,
+        orientation='h',
+        text=series.round(1),
+        textposition='outside',
+        marker_color='steelblue'
+    ))
+    fig.update_layout(
+        title=f"{midcategory} 내 문항별 평균 점수 비교 (0~100 환산)",
+        xaxis_title="평균 점수",
+        height=350,
+        margin=dict(t=40, b=60)
+    )
+    return fig
 
 # ─────────────────────────────────────────────────────
 # ▶️ Streamlit 실행
@@ -775,7 +857,9 @@ main_tabs = st.tabs([
     "🗺️ 자치구 구성 문항",
     "📊도서관 이용양태 분석",
     "🖼️ 도서관 이미지 분석",
-     "🏋️ 도서관 강약점 분석"
+    "🏋️ 도서관 강약점 분석",
+    "🔍 심화 분석"
+
 ])
 
 # 1) 응답자 정보
@@ -917,3 +1001,28 @@ with main_tabs[5]:
         st.plotly_chart(tbl9, use_container_width=True)
     else:
         st.warning("DQ9 문항이 없습니다.")
+
+# 7) 심화 분석 탭
+with main_tabs[6]:
+    st.header("🔍 심화 분석")
+    advanced_tabs = st.tabs(["공통 심화 분석", "중분류 내 문항 편차"]);
+
+    with advanced_tabs[0]:
+        st.subheader("중분류별 전체 만족도 (레이더 차트)")
+        radar = plot_midcategory_radar(df)
+        if radar:
+            st.plotly_chart(radar, use_container_width=True)
+        else:
+            st.warning("중분류 점수를 계산할 수 있는 문항이 부족합니다.")
+
+    with advanced_tabs[1]:
+        st.subheader("중분류 내 문항별 편차")
+        mid_scores = compute_midcategory_scores(df)
+        if mid_scores.empty:
+            st.warning("중분류 문항이 없어 편차를 계산할 수 없습니다.")
+        else:
+            for mid in mid_scores.index:
+                bar = plot_within_category_bar(df, mid)
+                if bar:
+                    st.markdown(f"### {mid}")
+                    st.plotly_chart(bar, use_container_width=True)
