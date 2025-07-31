@@ -1314,8 +1314,8 @@ def page_segment_analysis(df):
 
 
     # --- Small Multiples: 중분류별 상위 3개 조합 비교 ---
-    st.markdown("### Small Multiples: 중분류별 세그먼트 조합 비교 (상위 3개)")
-    top3 = group_means.nlargest(3, "응답자수").copy()
+    st.markdown("### Small Multiples: 중분류별 세그먼트 조합 비교 (상위 10개)")
+    top3 = group_means.nlargest(10, "응답자수").copy()
     for mc in midcats:
         tmp = top3[[*segment_cols_filtered, mc, "응답자수"]].copy()
         tmp["조합"] = tmp.apply(lambda r: " | ".join([str(r[c]) for c in segment_cols_filtered]), axis=1)
@@ -1324,20 +1324,10 @@ def page_segment_analysis(df):
             x="조합",
             y=mc,
             text=mc,
-            title=f"{mc} 비교 (상위 3개 세그먼트 조합)"
+            title=f"{mc} 비교 (상위 10개 세그먼트 조합)"
         )
         fig_small.update_traces(texttemplate='%{text:.1f}', textposition='outside')
         st.plotly_chart(fig_small, use_container_width=True)
-
-    # --- 순위 변화 요약 (전체 평균 대비) ---
-    st.markdown("### 중분류 순위 변화 (전체 평균 대비)")
-    # 상위 몇 개 조합에 대해 텍스트로 보여줌
-    for i, row in rank_change.head(5).iterrows():
-        combo_label = group_means.loc[i, "조합"]
-        changes = row.to_dict()
-        diffs = ", ".join(f"{mc}: {int(changes[mc]):+d}" for mc in midcats)
-        st.write(f"**{combo_label}** 순위 변화: {diffs}")
-
 
     # 8. 통합 표 한 번에 출력
     st.markdown("#### 세그먼트 조합별 중분류별 만족도 및 응답자수")
