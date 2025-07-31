@@ -1137,6 +1137,7 @@ def page_segment_analysis(df):
         showlegend=True,
         height=500
     )
+    st.plotly_chart(fig, use_container_width=True)
     # 세그먼트 조합별 응답자 수 표에서 숫자 연령 컬럼(SQ2 등) 제거
     drop_cols = [c for c in counts.columns if (
         c.startswith("SQ2") and "GROUP" not in c  # SQ2 중 SQ2_GROUP 아니면 제거
