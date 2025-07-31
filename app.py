@@ -525,9 +525,7 @@ def plot_within_category_bar(df, midcategory):
     if mid_mean is not None:
         fig.add_vline(
             x=mid_mean,
-            line_color="red",
-            annotation_text=f"중분류 평균: {mid_mean:.1f}",
-            annotation_position="top right"
+            line_color="red"
         )
     # y축 라벨이 몇 줄로 나뉘었는지 계산해서 최소 높이 보장
     max_lines = max(label.count("<br>") + 1 for label in wrapped_labels) if wrapped_labels else 1
