@@ -380,15 +380,15 @@ def page_home(df):
     for q in soc_qs:
         try:
             if q.startswith("SQ2"):
-                bar, tbl = plot_age_histogram_with_labels(df, q)
+                bar, table_df = plot_age_histogram_with_labels(df, q)
             elif q.startswith("BQ2"):
-                bar, tbl = plot_bq2_bar(df, q)
+                bar, table_df = plot_bq2_bar(df, q)
             elif q.startswith("SQ4"):
-                bar, tbl = plot_sq4_custom_bar(df, q)
+                bar, table_df = plot_sq4_custom_bar(df, q)
             else:
-                bar, tbl = plot_categorical_stacked_bar(df, q)
+                bar, table_df = plot_categorical_stacked_bar(df, q)
             st.plotly_chart(bar, use_container_width=True)
-            show_table(tbl_df, q)
+            show_table(table_df, q)
             st.divider()
         except Exception as e:
             st.error(f"{q} 에러: {e}")
@@ -1082,9 +1082,5 @@ with main_tabs[6]:
             st.markdown(f"### {mid}")
             st.plotly_chart(fig, use_container_width=True)
             if table_df is not None:
-                show_table_with_download(
-                    table_df.reset_index().rename(columns={"index": "문항"}),
-                    f"{mid} 항목별 편차",
-                    f"{mid.replace(' ','_')}_within_item_variance"
-                )
-                st.markdown("---")
+               show_table(table_df.reset_index().rename(columns={"index": "문항"}),f"{mid} 항목별 편차")
+            st.markdown("---")
