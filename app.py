@@ -831,22 +831,14 @@ def page_short_keyword(df):
 # 상단에 mode 선택 추가 (사이드 탭 역할)
 mode = st.sidebar.radio("분석 모드", ["기본 분석", "심화 분석"])
 
-# 기존 메인 탭 이름 정의 (심화 분석 탭은 별도 처리)
-base_tab_names = [
-    "👤 응답자 정보",
-    "📈 만족도 기본 시각화",
-    "🗺️ 자치구 구성 문항",
-    "📊도서관 이용양태 분석",
-    "🖼️ 도서관 이미지 분석",
-    "🏋️ 도서관 강약점 분석",
-]
+
 
 if mode == "기본 분석":
     # 심화 분석 탭 제외
-    main_tabs = st.tabs(base_tab_names)
+    base_tab_names = st.tabs(base_tab_names)
 elif mode == "심화 분석":
     # 기존 탭에 '공통 심화 분석(전체)' 추가, 기존 심화 분석("🔍 심화 분석")은 제거된 상태로
-    main_tabs = st.tabs(base_tab_names + ["공통 심화 분석(전체)"])
+    base_tab_names = st.tabs(base_tab_names + ["공통 심화 분석(전체)"])
 
 st.set_page_config(
     page_title="공공도서관 설문 시각화 대시보드",
@@ -861,23 +853,23 @@ if not uploaded:
 df = pd.read_excel(uploaded)
 st.success("✅ 업로드 완료")
 
-main_tabs = st.tabs([
+# 기존 메인 탭 이름 정의 (심화 분석 탭은 별도 처리)
+base_tab_names = [
     "👤 응답자 정보",
     "📈 만족도 기본 시각화",
     "🗺️ 자치구 구성 문항",
     "📊도서관 이용양태 분석",
     "🖼️ 도서관 이미지 분석",
     "🏋️ 도서관 강약점 분석",
-    "🔍 심화 분석"
-])
+]
 
-with main_tabs[0]:
+with base_tab_names[0]:
     page_home(df)
 
-with main_tabs[1]:
+with base_tab_names[1]:
     page_basic_vis(df)
 
-with main_tabs[2]:
+with base_tab_names[2]:
     st.header("🗺️ 자치구 구성 문항 분석")
     sub_tabs = st.tabs([
         "7점 척도 시각화",
@@ -909,7 +901,7 @@ with main_tabs[2]:
             df_long = process_answers(answers)
             show_short_answer_keyword_analysis(df_long)
 
-with main_tabs[3]:
+with base_tab_names[3]:
     st.header("📊 도서관 이용양태 분석")
     sub_tabs = st.tabs(["DQ1~5", "DQ6 계열"])
 
@@ -965,7 +957,7 @@ with main_tabs[3]:
                     bar, tbl = plot_categorical_stacked_bar(df, col)
                     render_chart_and_table(bar, tbl, col, key_prefix="dq6")
 
-with main_tabs[4]:
+with base_tab_names[4]:
     st.header("🖼️ 도서관 이미지 분석")
     fig, tbl = plot_likert_diverging(df, prefix="DQ7-E")
     if fig is not None:
@@ -973,7 +965,7 @@ with main_tabs[4]:
     else:
         st.warning("DQ7-E 문항이 없습니다.")
 
-with main_tabs[5]:
+with base_tab_names[5]:
     st.header("🏋️ 도서관 강약점 분석")
     fig8, tbl8, q8 = plot_pair_bar(df, "DQ8")
     if fig8 is not None:
@@ -986,10 +978,10 @@ with main_tabs[5]:
     else:
         st.warning("DQ9 문항이 없습니다.")
 
-# 기존 main_tabs[6]에 있었던 심화 분석 내용 재배치
+# 기존 base_tab_names[6]에 있었던 심화 분석 내용 재배치
 if mode == "심화 분석":
     # "공통 심화 분석(전체)"은 base_tab_names 뒤에 붙은 마지막 탭
-    with main_tabs[-1]:
+    with base_tab_names[-1]:
         st.header("🔍 공통 심화 분석(전체)")
         st.subheader("중분류별 전체 만족도 (레이더 차트 및 평균값)")
         radar = plot_midcategory_radar(df)
