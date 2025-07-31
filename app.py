@@ -344,7 +344,7 @@ def show_short_answer_keyword_analysis(df_result):
 
 #-----------------------------------------------------------------------------
 #페이지 구분
-with main_tabs[0]:
+def page_home(df):
     st.subheader("👤 인구통계 문항 (SQ1 ~ 5 / BQ1 ~ 2)")
     soc_qs = [c for c in df.columns if c.startswith("SQ") or c.startswith("BQ")]
     for q in soc_qs:
@@ -362,7 +362,6 @@ with main_tabs[0]:
             st.divider()
         except Exception as e:
             st.error(f"{q} 에러: {e}")
-
 
 def page_basic_vis(df):
     st.subheader("📈 7점 척도 만족도 문항 (Q1 ~ Q8)")
