@@ -851,85 +851,6 @@ def page_short_keyword(df):
         df_result = process_answers(answers)
         show_short_answer_keyword_analysis(df_result)
 
-# ------------------------------------------
-# Q1~Q6 중분류별 A/B/C (서비스 평가/효과/만족도) 평균값 계산 및 시각화
-# ------------------------------------------
-
-CATEGORY_MAP = {
-    "공간 및 이용편의성": "Q1",
-    "정보 획득 및 활용": "Q2",
-    "소통 및 정책 활용": "Q3",
-    "문화·교육 향유": "Q4",
-    "사회적 관계 형성": "Q5",
-    "개인의 삶과 역량": "Q6",
-}
-TYPE_MAP = {
-    "A": "서비스 평가",
-    "B": "서비스 효과",
-    "C": "전반적 만족도",
-}
-
-def get_abc_category_means(df):
-    """중분류별 A/B/C 문항 평균값 DataFrame 반환"""
-    result = []
-    for cat, prefix in CATEGORY_MAP.items():
-        for t in ["A", "B", "C"]:
-            if t == "C":
-                cols = [c for c in df.columns if c == f"{prefix}-C"]
-            else:
-                cols = [c for c in df.columns if c.startswith(f"{prefix}-{t}-")]
-            if not cols:
-                mean_val = None
-            else:
-                vals = df[cols].apply(pd.to_numeric, errors='coerce')
-                mean_val = 100 * (vals.mean(axis=1, skipna=True) - 1) / 6  # 7점척도 0~100환산
-                mean_val = mean_val.mean()
-            result.append({
-                "중분류": cat,
-                "문항유형": TYPE_MAP[t],
-                "평균값": round(mean_val, 2) if mean_val is not None else None
-            })
-    return pd.DataFrame(result)
-
-def plot_abc_radar(df_mean):
-    categories = df_mean['중분류'].unique().tolist()
-    fig = go.Figure()
-    color_map = {
-        "서비스 평가": "#2ca02c",
-        "서비스 효과": "#1f77b4",
-        "전반적 만족도": "#d62728"
-    }
-    for t in TYPE_MAP.values():
-        vals = df_mean[df_mean['문항유형'] == t].set_index('중분류').reindex(categories)['평균값'].tolist()
-        fig.add_trace(go.Scatterpolar(
-            r = vals + [vals[0]],
-            theta = categories + [categories[0]],
-            fill = 'toself',
-            name = t,
-            line=dict(color=color_map.get(t, None)),
-        ))
-    fig.update_layout(
-        polar=dict(radialaxis=dict(range=[0, 100])),
-        title="중분류별 서비스 평가/효과/만족도 (A/B/C) 레이더차트",
-        showlegend=True,
-        height=450
-    )
-    return fig
-
-def plot_abc_grouped_bar(df_mean):
-    fig = px.bar(
-        df_mean,
-        x='중분류',
-        y='평균값',
-        color='문항유형',
-        barmode='group',
-        text='평균값',
-        height=450,
-        title="중분류별 서비스 평가/효과/만족도 (A/B/C) 평균값"
-    )
-    fig.update_traces(texttemplate='%{text:.1f}', textposition='outside')
-    fig.update_yaxes(range=[0,100])
-    return fig
 
 
 # ─────────────────────────────────────────────────────
@@ -1078,7 +999,8 @@ if mode == "기본 분석":
             st.warning("DQ9 문항이 없습니다.")
 
 elif mode == "심화 분석":
-    tabs = st.tabs(["공통 심화 분석(전체)", "공통 심화 분석(영역)"])    with tabs[0]:
+    tabs = st.tabs(["공통 심화 분석(전체)", "공통 심화 분석(영역)"])
+    with tabs[0]:
         st.header("🔍 공통 심화 분석(전체)")
         st.subheader("중분류별 전체 만족도 (레이더 차트 및 평균값)")
         radar = plot_midcategory_radar(df)
@@ -1110,17 +1032,3 @@ elif mode == "심화 분석":
                         f"{mid} 항목별 편차"
                     )
                     st.markdown("---")
-    with tabs[1]:
-        st.header("🔍 공통 심화 분석(영역별 A/B/C 비교)")
-        df_mean = get_abc_category_means(df)
-        radar_fig = plot_abc_radar(df_mean)
-        bar_fig = plot_abc_grouped_bar(df_mean)
-
-        st.subheader("중분류별 서비스 평가/효과/만족도 (A/B/C) 레이더 차트")
-        st.plotly_chart(radar_fig, use_container_width=True)
-
-        st.subheader("중분류별 서비스 평가/효과/만족도 (A/B/C) 묶음(bar) 차트")
-        st.plotly_chart(bar_fig, use_container_width=True)
-
-        st.markdown("#### 상세 데이터")
-        st.dataframe(df_mean)
