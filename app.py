@@ -816,16 +816,18 @@ def plot_midcategory_radar(df):
 def plot_within_category_bar(df, midcategory):
     item_scores = compute_within_category_item_scores(df)
     if midcategory not in item_scores:
-        return None
-    # 원래 컬럼 순서 유지
+        return None, None
+    # 원래 컬럼 순서 유지 (역순으로 표시)
     predicate = MIDDLE_CATEGORY_MAPPING[midcategory]
     orig_cols = [c for c in df.columns if predicate(c)]
+    # 역순으로
+    orig_cols_rev = orig_cols[::-1]
     series = item_scores[midcategory]
-    # reindex to original order if possible
-    series = series.reindex(orig_cols)
+    series = series.reindex(orig_cols_rev)
     # 중분류 전체 평균
     mid_scores = compute_midcategory_scores(df)
     mid_mean = mid_scores.get(midcategory, None)
+    # 바 차트
     fig = go.Figure(go.Bar(
         x=series.values,
         y=series.index,
@@ -836,14 +838,39 @@ def plot_within_category_bar(df, midcategory):
     ))
     if mid_mean is not None:
         fig.add_vline(x=mid_mean, line_dash="dash", line_color="red",
-                      annotation_text=f"중분류 평균 {mid_mean:.1f}", annotation_position="top right")
+                      annotation_text=f"중분류 평균 {mid_mean:.2f}", annotation_position="top right")
     fig.update_layout(
         title=f"{midcategory} 내 문항별 평균 점수 비교 (0~100 환산)",
         xaxis_title="평균 점수",
         height=300,
         margin=dict(t=40, b=60)
     )
-    return fig
+    # 하단 표: 항목별 평균 + 편차
+    if mid_mean is not None:
+        diff = series - mid_mean
+        table_df = pd.DataFrame({
+            '평균 점수': series.round(2),
+            '중분류 평균': [round(mid_mean,2)] * len(series),
+            '편차 (문항 - 중분류 평균)': diff.round(2)
+        }, index=series.index)
+    else:
+        table_df = pd.DataFrame({
+            '평균 점수': series.round(2)
+        }, index=series.index)
+    # 테이블 생성
+    table_fig = go.Figure(go.Table(
+        header=dict(
+            values=["문항"] + list(table_df.columns),
+            align='center'
+        ),
+        cells=dict(
+            values=[table_df.index] + [table_df[col].tolist() for col in table_df.columns],
+            align='center'
+        )
+    ))
+    table_fig.update_layout(margin=dict(t=5, b=5))
+    return fig, table_fig
+
 
 # ─────────────────────────────────────────────────────
 # ▶️ Streamlit 실행
@@ -1022,11 +1049,9 @@ with main_tabs[6]:
     radar = plot_midcategory_radar(df)
     if radar is not None:
         st.plotly_chart(radar, use_container_width=True)
-        # 평균값 테이블
-        mid_scores = compute_midcategory_scores(df)
-        if not mid_scores.empty:
-            tbl_avg = mid_scores.rename("평균 점수(0~100)").to_frame().reset_index().rename(columns={"index": "중분류"})
-            tbl_avg["평균 점수(0~100)"] = tbl_avg["평균 점수(0~100)"].round(1)
+        # 평균값 테이블 (소수점 둘째자리)
+        tbl_avg = midcategory_avg_table(df)
+        if not tbl_avg.empty:
             st.markdown("#### 중분류별 평균 점수")
             st.table(tbl_avg)
         else:
@@ -1040,28 +1065,11 @@ with main_tabs[6]:
     if mid_scores.empty:
         st.warning("중분류 문항이 없어 편차를 계산할 수 없습니다.")
     else:
-        within_scores = compute_within_category_item_scores(df)
         for mid in mid_scores.index:
-            series = within_scores.get(mid)
-            if series is None or series.empty:
+            fig, tbl = plot_within_category_bar(df, mid)
+            if fig is None:
                 continue
-            # 원래 df.columns 순서 유지
-            predicate = MIDDLE_CATEGORY_MAPPING[mid]
-            orig_cols = [c for c in df.columns if predicate(c)]
-            series = series.reindex(orig_cols)
-            fig = go.Figure(go.Bar(
-                x=series.values,
-                y=series.index,
-                orientation='h',
-                text=series.round(1),
-                textposition='outside',
-                marker_color='steelblue'
-            ))
-            fig.update_layout(
-                title=f"{mid} 내 문항별 평균 점수 비교 (0~100 환산)",
-                xaxis_title="평균 점수",
-                height=300,
-                margin=dict(t=40, b=60)
-            )
             st.markdown(f"### {mid}")
             st.plotly_chart(fig, use_container_width=True)
+            if tbl is not None:
+                st.plotly_chart(tbl, use_container_width=True)
