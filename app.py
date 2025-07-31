@@ -1286,53 +1286,6 @@ def page_segment_analysis(df):
     )
     st.plotly_chart(fig_delta, use_container_width=True)
 
-    # --- 그룹화된 막대: 상위 응답자수 조합별 중분류 비교 ---
-    st.markdown("### 상위 세그먼트 조합별 중분류 만족도 비교 (전체 평균 기준선 포함)")
-    top_group = group_means.nlargest(5, "응답자수").copy()
-    melted = top_group.melt(id_vars=segment_cols_filtered + ["응답자수", "조합"], value_vars=midcats,
-                             var_name="중분류", value_name="평균점수")
-    fig_group = px.bar(
-        melted,
-        x="중분류",
-        y="평균점수",
-        color="조합",
-        barmode="group",
-        text="평균점수",
-        title="응답자 수 상위 5개 세그먼트 조합의 중분류별 만족도"
-    )
-    fig_group.update_traces(texttemplate='%{text:.1f}', textposition='outside')
-    # 전체 평균 기준선(중분류별로 facet이 아니라면 아래처럼 보조선은 일반적 참고)
-    for mc in midcats:
-        fig_group.add_hline(
-            y=overall_means[mc],
-            line_dash="dash",
-            annotation_text=f"{mc} 전체 평균",
-            annotation_position="top left"
-        )
-    st.plotly_chart(fig_group, use_container_width=True)
-
-    # --- Slopegraph: 전체 평균 vs 상위 3개 조합 ---
-    st.markdown("### 전체 평균 대비 상위 3개 조합의 중분류 프로파일 변화 (Slopegraph)")
-    def plot_slope_for_combo(row):
-        combo_label = row["조합"]
-        df_slope = pd.DataFrame({
-            "중분류": midcats * 2,
-            "점수": [overall_means[mc] for mc in midcats] + [row[mc] for mc in midcats],
-            "그룹": ["전체 평균"] * len(midcats) + [combo_label] * len(midcats)
-        })
-        fig = px.line(
-            df_slope,
-            x="중분류",
-            y="점수",
-            color="그룹",
-            markers=True,
-            title=f"전체 평균 vs {combo_label}"
-        )
-        fig.update_layout(yaxis_range=[50, 100])
-        return fig
-
-    for _, row in group_means.nlargest(3, "응답자수").iterrows():
-        st.plotly_chart(plot_slope_for_combo(row), use_container_width=True)
 
     # --- 평균 차이 + 간이 신뢰구간 막대 (예: 특정 중분류별 상위 5개) ---
     st.markdown("### 전체 평균 대비 편차와 간이 신뢰구간 (중분류별)")
@@ -1359,33 +1312,6 @@ def page_segment_analysis(df):
         )
         st.plotly_chart(fig_ci, use_container_width=True)
 
-    # --- 분포 비교 (Violin) ---
-    st.markdown("### 중분류별 점수 분포 비교 (Violin, 전체 응답자 기준)")
-    # 각 응답자별 중분류 점수 계산 (scale 후 평균)
-    def compute_midcat_per_respondent(df, mid):
-        predicate = MIDDLE_CATEGORY_MAPPING[mid]
-        cols = [c for c in df.columns if predicate(c)]
-        if not cols:
-            return pd.Series([None]*len(df))
-        scaled = df[cols].apply(scale_likert)
-        return scaled.mean(axis=1, skipna=True)
-
-    df2_for_violin = add_derived_columns(df)
-    violin_df = pd.DataFrame({mid: compute_midcat_per_respondent(df2_for_violin, mid) for mid in midcats})
-    # 예: '공간 및 이용편의성'을 세그먼트 첫 기준으로 비교
-    if segment_cols_filtered:
-        seg_col_example = segment_cols_filtered[0]
-        violin_df[seg_col_example] = df2_for_violin[seg_col_example].astype(str)
-        for mid in midcats[:2]:  # 부담 줄이려고 첫 두 개만
-            fig_violin = px.violin(
-                violin_df,
-                y=mid,
-                x=seg_col_example,
-                box=True,
-                points="all",
-                title=f"{mid} 점수 분포 by {seg_col_example}"
-            )
-            st.plotly_chart(fig_violin, use_container_width=True)
 
     # --- Small Multiples: 중분류별 상위 3개 조합 비교 ---
     st.markdown("### Small Multiples: 중분류별 세그먼트 조합 비교 (상위 3개)")
