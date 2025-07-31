@@ -529,11 +529,9 @@ def plot_dq1(df):
     fig.update_layout(title=question, xaxis_title="이용 빈도 구간", yaxis_title="응답 수",
                       bargap=0.2, height=450, margin=dict(t=30,b=50), xaxis_tickangle=-15)
 
-    tbl_df = pd.DataFrame({"응답 수":grp, "비율 (%)":pct}).T
-    tbl = go.Figure(go.Table(header=dict(values=[""]+list(tbl_df.columns)),
-                               cells=dict(values=[tbl_df.index]+[tbl_df[c].tolist() for c in tbl_df.columns])))
-    tbl.update_layout(height=250, margin=dict(t=10,b=5))
-    return fig, tbl, question
+    tbl_df = pd.DataFrame({"응답 수":grp, "비율 (%)":pct}).T  # <- DataFrame 그대로 반환
+    return fig, tbl_df, question
+
 
 def plot_dq2(df):
     cols = [c for c in df.columns if c.startswith("DQ2")]
@@ -563,19 +561,7 @@ def plot_dq2(df):
     fig.update_layout(title=question, xaxis_title="이용 기간 (년)", yaxis_title="응답 수",
                       bargap=0.2, height=450, margin=dict(t=30,b=50), xaxis_tickangle=-15)
     tbl_df = pd.DataFrame({"응답 수":grp, "비율 (%)":pct}).T
-    tbl = go.Figure(go.Table(header=dict(values=[""]+labels),
-                               cells=dict(values=[tbl_df.index]+[tbl_df[c].tolist() for c in tbl_df.columns])))
-    tbl.update_layout(height=250, margin=dict(t=10,b=5))
-    return fig, tbl, question
-
-def plot_dq3(df):
-    cols = [c for c in df.columns if c.startswith("DQ3")]
-    if not cols:
-        return None, None, ""
-    question = cols[0]
-    temp_df = df[[question]].dropna().astype(str)
-    fig, table_df = plot_categorical_stacked_bar(temp_df, question)
-    return fig, table_df, question
+    return fig, tbl_df, question
 
 def plot_dq4_bar(df):
     cols = [c for c in df.columns if c.startswith("DQ4")]
@@ -625,21 +611,8 @@ def plot_dq4_bar(df):
         '1순위 비율(%)': sorted_pct1.values,
         '2순위 응답 수': sorted_counts2.values,
         '2순위 비율(%)': sorted_pct2.values
-    }, index=sorted_labels).T
-
-    table_fig = go.Figure(go.Table(
-        header=dict(
-            values=[""] + sorted_labels,
-            align='center', height=30, font=dict(size=11)
-        ),
-        cells=dict(
-            values=[table_df.index] + [table_df[label].tolist() for label in sorted_labels],
-            align='center', height=28, font=dict(size=10)
-        )
-    ))
-    table_fig.update_layout(height=250, margin=dict(t=10, b=5))
-
-    return fig, table_fig, question
+    }, index=sorted_labels).T  # <- DataFrame 형태로 반환
+    return fig, table_df, question
 
 def plot_dq5(df):
     cols = [c for c in df.columns if c.startswith("DQ5")]
@@ -647,8 +620,8 @@ def plot_dq5(df):
         return None, None, ""
     question = cols[0]
     temp_df = df[[question]].dropna().astype(str)
-    fig, table_fig = plot_categorical_stacked_bar(temp_df, question)
-    return fig, table_fig, question
+    fig, table_df = plot_categorical_stacked_bar(temp_df, question)
+    return fig, table_df, question
 
 def plot_likert_diverging(df, prefix="DQ7-E"):
     cols = [c for c in df.columns if c.startswith(prefix)]
@@ -697,20 +670,9 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
         margin=dict(t=30, b=5),
     )
 
-    table_df = likert_df.copy()
-    table_df = table_df.reindex(columns=range(1,8))
-    table_fig = go.Figure(go.Table(
-        header=dict(
-            values=["문항"] + [f"{c}점" for c in table_df.columns],
-            align='center'
-        ),
-        cells=dict(
-            values=[table_df.index] + [table_df[c].tolist() for c in table_df.columns],
-            align='center'
-        )
-    ))
-    table_fig.update_layout(margin=dict(t=5, b=5))
-    return fig, table_fig
+    table_df = likert_df.copy()  # <- DataFrame 반환
+    return fig, table_df
+
 
 def plot_pair_bar(df, prefix):
     cols = [c for c in df.columns if c.startswith(prefix)]
@@ -745,14 +707,9 @@ def plot_pair_bar(df, prefix):
         '1순위 비율(%)': pct1.values,
         '2순위 응답 수': counts2.values,
         '2순위 비율(%)': pct2.values
-    }, index=labels).T
+    }, index=labels).T  # <- DataFrame 형태로
+    return fig, table_df, question
 
-    table_fig = go.Figure(go.Table(
-        header=dict(values=[""] + labels, align='center'),
-        cells=dict(values=[table_df.index] + [table_df[l].tolist() for l in labels], align='center')
-    ))
-    table_fig.update_layout(height=250, margin=dict(t=10, b=10))
-    return fig, table_fig, question
 
 # ─────────────────────────────────────────────────────
 # 페이지 구조
