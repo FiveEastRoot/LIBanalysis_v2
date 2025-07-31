@@ -796,7 +796,6 @@ def midcategory_avg_table(df):
     tbl["평균 점수(0~100)"] = tbl["평균 점수(0~100)"].round(2)
     return tbl
 
-
 # ------------------ 시각화: 심화 분석 ------------------
 
 def plot_midcategory_radar(df):
@@ -826,7 +825,7 @@ def plot_midcategory_radar(df):
 def plot_within_category_bar(df, midcategory):
     item_scores = compute_within_category_item_scores(df)
     if midcategory not in item_scores:
-        return None, None
+        return None, None, None
     # 원래 컬럼 순서 유지 (역순으로 표시)
     predicate = MIDDLE_CATEGORY_MAPPING[midcategory]
     orig_cols = [c for c in df.columns if predicate(c)]
@@ -847,10 +846,12 @@ def plot_within_category_bar(df, midcategory):
         marker_color='steelblue'
     ))
     if mid_mean is not None:
-        fig.add_vline(x=mid_mean, line_color="red")
+        fig.add_vline(x=mid_mean, line_dash="dash", line_color="red",
+                      annotation_text=f"중분류 평균 {mid_mean:.2f}", annotation_position="top right")
     fig.update_layout(
         title=f"{midcategory} 내 문항별 평균 점수 비교 (0~100 환산)",
-        xaxis_title=f"{midcategory} 중분류 평균 {mid_mean:.2f}",
+        xaxis_title="평균 점수",
+        height=300,
         margin=dict(t=40, b=60)
     )
     # 하단 표: 항목별 평균 + 편차
@@ -876,8 +877,8 @@ def plot_within_category_bar(df, midcategory):
             align='center'
         )
     ))
-    table_fig.update_layout(margin=dict(t=5, b=5), height=500)
-    return fig, table_fig
+    table_fig.update_layout(margin=dict(t=5, b=5))
+    return fig, table_fig, table_df
 
 # ─────────────────────────────────────────────────────
 # ▶️ Streamlit 실행
@@ -1061,6 +1062,14 @@ with main_tabs[6]:
         if not tbl_avg.empty:
             st.markdown("#### 중분류별 평균 점수")
             st.table(tbl_avg)
+            # 다운로드 버튼 (CSV)
+            csv_bytes = tbl_avg.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="중분류 평균 점수 다운로드 (CSV)",
+                data=csv_bytes,
+                file_name="midcategory_avg_scores.csv",
+                mime="text/csv"
+            )
         else:
             st.warning("중분류 평균을 계산할 수 없습니다.")
     else:
@@ -1073,10 +1082,18 @@ with main_tabs[6]:
         st.warning("중분류 문항이 없어 편차를 계산할 수 없습니다.")
     else:
         for mid in mid_scores.index:
-            fig, tbl = plot_within_category_bar(df, mid)
+            fig, tbl, table_df = plot_within_category_bar(df, mid)
             if fig is None:
                 continue
             st.markdown(f"### {mid}")
             st.plotly_chart(fig, use_container_width=True)
             if tbl is not None:
                 st.plotly_chart(tbl, use_container_width=True)
+                # 다운로드 버튼: 항목별 편차 테이블
+                csv_bytes = table_df.reset_index().rename(columns={"index": "문항"}).to_csv(index=False).encode('utf-8-sig')
+                st.download_button(
+                    label=f"{mid} 항목별 편차 다운로드 (CSV)",
+                    data=csv_bytes,
+                    file_name=f"{mid.replace(' ','_')}_within_item_variance.csv",
+                    mime="text/csv"
+                )
