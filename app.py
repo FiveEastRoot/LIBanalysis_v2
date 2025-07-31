@@ -17,7 +17,6 @@ def wrap_label(label, width=10):
     return '<br>'.join([label[i:i+width] for i in range(0, len(label), width)])
 # 네이티브 테이블로 보여주는 유틸 (다운로드 버튼 제거, Streamlit 내장 복사/다운로드 사용)
 def show_table(df, caption):
-    st.markdown(f"#### {caption}")
     st.dataframe(df)
 
 # ─────────────────────────────────────────────────────
