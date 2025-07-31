@@ -1011,7 +1011,7 @@ def add_derived_columns(df):
         dq4_cols = [c for c in df.columns if ("DQ4" in c) and ("1순위" in c)]
         if dq4_cols:
             df["DQ4_1ST"] = df[dq4_cols[0]]
-    return df
+    # SQ2: 5세 단위 범주화 (SQ2_GROUP)
     if "SQ2_GROUP" not in df.columns:
         sq2_cols = [c for c in df.columns if "SQ2" in c]
         if sq2_cols:
@@ -1019,7 +1019,7 @@ def add_derived_columns(df):
             # 숫자 추출 후 정수 변환
             data = df[sq2_col].dropna().astype(str).str.extract(r'(\d+)')
             data.columns = ['age']
-            data['age'] = pd.to_numeric(data['age'], errors='coerce').dropna()
+            data['age'] = pd.to_numeric(data['age'], errors='coerce')
             def age_group(age):
                 if pd.isna(age):
                     return None
@@ -1033,6 +1033,7 @@ def add_derived_columns(df):
                     return f"{base}~{base+4}세"
             df["SQ2_GROUP"] = data['age'].apply(age_group)
     return df
+
 
 
 # 4. 메인 분석 및 시각화 함수
