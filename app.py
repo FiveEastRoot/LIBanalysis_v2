@@ -30,7 +30,6 @@ def show_table(df, caption):
     st.dataframe(df)
 
 def render_chart_and_table(bar, table, title, key_prefix=""):
-    st.subheader(title)
     if bar is not None:
         st.plotly_chart(bar, use_container_width=True, key=f"{key_prefix}-bar-{title}")
     if isinstance(table, go.Figure):
