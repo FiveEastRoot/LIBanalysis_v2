@@ -871,7 +871,6 @@ def plot_within_category_bar(df, midcategory):
     table_fig.update_layout(margin=dict(t=5, b=5))
     return fig, table_fig
 
-
 # ─────────────────────────────────────────────────────
 # ▶️ Streamlit 실행
 # ─────────────────────────────────────────────────────
