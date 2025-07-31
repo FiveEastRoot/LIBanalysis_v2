@@ -489,7 +489,7 @@ def plot_midcategory_radar(df):
     return fig
 
 
-def wrap_label_fixed(label: str, width: int = 15) -> str:
+def wrap_label_fixed(label: str, width: int = 20) -> str:
     # 한 줄에 공백 포함 정확히 width 글자씩 자르고 <br>로 연결
     parts = [label[i:i+width] for i in range(0, len(label), width)]
     return "<br>".join(parts)
@@ -531,7 +531,7 @@ def plot_within_category_bar(df, midcategory):
         )
     # y축 라벨이 몇 줄로 나뉘었는지 계산해서 최소 높이 보장
     max_lines = max(label.count("<br>") + 1 for label in wrapped_labels) if wrapped_labels else 1
-    per_item_height = 40  # 한 항목당 기본 높이
+    per_item_height = 50  # 한 항목당 기본 높이
     total_height = max(300, per_item_height * len(wrapped_labels))
 
     fig.update_layout(
