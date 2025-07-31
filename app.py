@@ -69,7 +69,8 @@ def plot_bq2_bar(df, question):
         x=categories,
         y=counts,
         text=counts,
-        textposition='outside'
+        textposition='outside',
+        marker_color=px.colors.qualitative.Plotly[: len(categories)]
     ))
     y_max = counts.max() + 20
     fig.update_layout(
@@ -80,7 +81,13 @@ def plot_bq2_bar(df, question):
         xaxis_tickangle=-30
     )
 
-    table_df = pd.DataFrame({'응답 수': counts, '비율 (%)': percent}, index=wrapped_labels).T
+    # SQ2 스타일 표: 행이 '응답 수','비율 (%)', 열이 항목 (자동 줄바꿈된 레이블)
+    table_df = pd.DataFrame(
+        [counts, percent],
+        index=["응답 수", "비율 (%)"],
+        columns=wrapped_labels
+    )
+
     return fig, table_df
 
 # ─────────────────────────────────────────────────────
@@ -91,13 +98,14 @@ def plot_sq4_custom_bar(df, question):
     cats = sorted(data.unique())
     counts = data.value_counts().reindex(cats).fillna(0).astype(int)
     percent = (counts / counts.sum() * 100).round(1)
-    labels = [wrap_label(remove_parentheses(x), 10) for x in cats]
+    display_labels = [wrap_label(remove_parentheses(x), 10) for x in cats]
 
     fig = go.Figure()
-    for cat in cats:
+    for i, cat in enumerate(cats):
         fig.add_trace(go.Bar(
             x=[percent[cat]], y=[question],
             orientation='h', name=remove_parentheses(cat),
+            marker_color=px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)],
             text=f"{percent[cat]}%", textposition='inside'
         ))
     fig.update_layout(
@@ -107,11 +115,14 @@ def plot_sq4_custom_bar(df, question):
         height=250, margin=dict(t=40, b=100)
     )
 
-    table_df = pd.DataFrame({
-        '응답 수': [counts[c] for c in cats],
-        '비율 (%)': [percent[c] for c in cats]
-    }, index=labels).T
+    table_df = pd.DataFrame(
+        [counts.values, percent.values],
+        index=["응답 수", "비율 (%)"],
+        columns=display_labels
+    )
+
     return fig, table_df
+
 
 
 # ─────────────────────────────────────────────────────
@@ -120,24 +131,28 @@ def plot_sq4_custom_bar(df, question):
 def plot_categorical_stacked_bar(df, question):
     data = df[question].dropna().astype(str)
     categories_raw = sorted(data.unique())
-    categories = [label.split('. ', 1)[-1] for label in categories_raw]
+    display_labels = [label.split('. ', 1)[-1] for label in categories_raw]
 
     counts = data.value_counts().reindex(categories_raw).fillna(0).astype(int)
     percent = (counts / counts.sum() * 100).round(1)
 
     fig = go.Figure()
-    for cat in reversed(categories):
-        raw_cat = categories_raw[categories.index(cat)]
+    # 시각화는 reversed order으로 쌓되, 라벨은 display_labels 대응
+    for i, label in enumerate(reversed(display_labels)):
+        # 대응되는 원래 카테고리
+        raw_cat = categories_raw[display_labels[::-1].index(label)]
         fig.add_trace(go.Bar(
             x=[percent[raw_cat]],
             y=[question],
             orientation='h',
-            name=cat,
+            name=label,
+            marker=dict(color=px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]),
             text=f"{percent[raw_cat]}%",
             textposition='inside',
             insidetextanchor='middle',
             hoverinfo='x+name'
         ))
+
     fig.update_layout(
         barmode='stack',
         showlegend=True,
@@ -152,14 +167,15 @@ def plot_categorical_stacked_bar(df, question):
         height=250, margin=dict(t=40, b=100)
     )
 
-    table_df = pd.DataFrame({
-        '응답 수': [counts[c] for c in categories_raw],
-        '비율 (%)': [percent[c] for c in categories_raw]
-    }, index=[wrap_label(c,10) for c in categories]).T
+    # SQ2 스타일 표: 행이 응답 수/비율, 열이 display_labels
+    table_df = pd.DataFrame(
+        [counts.values, percent.values],
+        index=["응답 수", "비율 (%)"],
+        columns=display_labels
+    )
 
-    # 역순 컬럼 반영 (표에서는 기존 요구대로)
-    table_df = table_df[table_df.columns[::-1]]
     return fig, table_df
+
 
 # ─────────────────────────────────────────────────────
 # Q1~Q9-D: 7점 척도 스택형 바 + Table
@@ -358,10 +374,11 @@ def page_home(df):
             else:
                 bar, table_df = plot_categorical_stacked_bar(df, q)
             st.plotly_chart(bar, use_container_width=True)
-            show_table(table_df, q)  # 또는 st.dataframe(table_df) 직접 사용
+            show_table(table_df, q)
             st.divider()
         except Exception as e:
             st.error(f"{q} 에러: {e}")
+
 
 def page_basic_vis(df):
     st.subheader("📈 7점 척도 만족도 문항 (Q1 ~ Q8)")
@@ -481,35 +498,15 @@ def plot_dq2(df):
     return fig, tbl, question
 
 def plot_dq3(df):
-    # DQ3 문항 자동 탐색
     cols = [c for c in df.columns if c.startswith("DQ3")]
     if not cols:
         return None, None, ""
     question = cols[0]
-    # 임시 DataFrame 생성
     temp_df = df[[question]].dropna().astype(str)
-    # 기존 범주형 스택 바 호출
-    fig, table_fig = plot_categorical_stacked_bar(temp_df, question)
-    return fig, table_fig, question
+    fig, table_df = plot_categorical_stacked_bar(temp_df, question)
+    return fig, table_df, question
 
-    # 테이블
-    table_df = pd.DataFrame({
-        "응답 수": counts.values,
-        "비율 (%)": percent.values
-    }, index=display_labels).T
-    table_fig = go.Figure(go.Table(
-        header=dict(
-            values=[""] + display_labels,
-            align='center', font=dict(size=11), height=30
-        ),
-        cells=dict(
-            values=[table_df.index] + [table_df[label].tolist() for label in display_labels],
-            align='center', font=dict(size=10), height=28
-        )
-    ))
-    table_fig.update_layout(height=250, margin=dict(t=10, b=5))
 
-    return fig, table_fig, question
 
 
 # ─────────────────────────────────────────────────────
