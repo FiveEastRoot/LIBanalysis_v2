@@ -794,6 +794,8 @@ def midcategory_avg_table(df):
         return pd.DataFrame()
     tbl = s.rename("평균 점수(0~100)").to_frame().reset_index().rename(columns={"index": "중분류"})
     tbl["평균 점수(0~100)"] = tbl["평균 점수(0~100)"].round(2)
+    # 평균 점수 기준 내림차순 정렬
+    tbl = tbl.sort_values(by="평균 점수(0~100)", ascending=False).reset_index(drop=True)
     return tbl
 
 # ------------------ 시각화: 심화 분석 ------------------
