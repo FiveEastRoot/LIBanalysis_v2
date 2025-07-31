@@ -43,7 +43,7 @@ def plot_age_histogram_with_labels(df, question):
         marker_color="#1f77b4"
     ))
     fig.update_layout(
-        yaxis_title="응답 수",
+        title=question, yaxis_title="응답 수",
         bargap=0.1, height=450, margin=dict(t=40, b=10)
     )
 
@@ -74,6 +74,7 @@ def plot_bq2_bar(df, question):
     ))
     y_max = counts.max() + 20
     fig.update_layout(
+        title=dict(text=question, font=dict(size=16)),
         yaxis=dict(title="응답 수", range=[0, y_max]),
         height=450,
         margin=dict(t=50, b=100),
@@ -110,6 +111,7 @@ def plot_sq4_custom_bar(df, question):
     fig.update_layout(
         barmode='stack', showlegend=True,
         legend=dict(orientation='h', y=-0.5, x=0.5, xanchor='center', traceorder='reversed'),
+        title=question, yaxis=dict(showticklabels=False),
         height=250, margin=dict(t=40, b=100)
     )
 
@@ -160,6 +162,7 @@ def plot_categorical_stacked_bar(df, question):
             xanchor='center', x=0.5,
             traceorder='reversed'
         ),
+        title=dict(text=question, font=dict(size=16)),
         yaxis=dict(showticklabels=False),
         height=250, margin=dict(t=40, b=100)
     )
