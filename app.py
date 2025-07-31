@@ -1220,6 +1220,197 @@ def page_segment_analysis(df):
             margin=dict(t=40, b=20)
         )
         st.plotly_chart(fig_radar, use_container_width=True)
+    # --- 추가 지표/편차 계산 ---
+    # 전체 중분류별 평균 벡터
+    overall_means = group_means[midcats].mean(axis=0)
+    # 각 조합별 delta (전체 평균 대비)
+    for mc in midcats:
+        group_means[f"{mc}_delta"] = group_means[mc] - overall_means[mc]
+    # 순위 변화 계산
+    ref_rank = overall_means.rank(ascending=False)
+    rank_df = group_means[[mc for mc in midcats]].rank(ascending=False, axis=1)
+    rank_change = rank_df.subtract(ref_rank, axis=1)
+    group_means["조합"] = group_means.apply(lambda r: " | ".join([str(r[c]) for c in segment_cols_filtered]), axis=1)
+
+    # --- 전체 평균 대비 편차 정렬 막대 ---
+    st.markdown("### 전체 평균 대비 편차 정렬 (세그먼트 조합별)")
+    deviation_df = group_means[[*segment_cols_filtered, "전체평균대비편차", "응답자수", "조합"]].copy()
+    deviation_df_sorted = deviation_df.sort_values("전체평균대비편차", ascending=False).reset_index(drop=True)
+    fig_dev = go.Figure()
+    fig_dev.add_trace(go.Bar(
+        x=deviation_df_sorted["전체평균대비편차"],
+        y=deviation_df_sorted["조합"],
+        orientation="h",
+        text=deviation_df_sorted["응답자수"].apply(lambda x: f"n={x}"),
+        hovertemplate="<b>%{y}</b><br>편차: %{x}<br>%{text}<extra></extra>",
+        marker=dict(
+            color=deviation_df_sorted["전체평균대비편차"],
+            colorscale="RdYlBu",
+            cmin=-max(abs(deviation_df_sorted["전체평균대비편차"])),
+            cmax= max(abs(deviation_df_sorted["전체평균대비편차"])),
+            showscale=True,
+        )
+    ))
+    fig_dev.update_layout(
+        title="세그먼트 조합별 전체 평균 대비 편차 (내림차순)",
+        xaxis_title="전체 평균 대비 편차",
+        height=max(400, 30 * len(deviation_df_sorted)),
+        margin=dict(l=250, t=40, b=40)
+    )
+    st.plotly_chart(fig_dev, use_container_width=True)
+
+    # --- 히트맵 + Delta 히트맵 ---
+    st.markdown("### 히트맵 + 전체 평균 대비 중분류별 편차 히트맵")
+    # 원본 히트맵 재사용 (중분류 평균)
+    heatmap_plot = group_means.set_index("조합")[midcats]
+    fig_abs = px.imshow(
+        heatmap_plot,
+        text_auto=True,
+        aspect="auto",
+        color_continuous_scale="Blues",
+        title="세그먼트 조합별 중분류 평균",
+        labels=dict(x="중분류", y="세그먼트 조합", color="평균점수")
+    )
+    st.plotly_chart(fig_abs, use_container_width=True)
+    # Delta 히트맵
+    delta_plot = group_means.set_index("조합")[[f"{mc}_delta" for mc in midcats]]
+    # 컬럼명 다시 원래로
+    delta_plot.columns = midcats
+    fig_delta = px.imshow(
+        delta_plot,
+        text_auto=True,
+        aspect="auto",
+        color_continuous_scale="RdBu_r",
+        title="전체 평균 대비 편차 (Delta)",
+        labels=dict(x="중분류", y="세그먼트 조합", color="편차")
+    )
+    st.plotly_chart(fig_delta, use_container_width=True)
+
+    # --- 그룹화된 막대: 상위 응답자수 조합별 중분류 비교 ---
+    st.markdown("### 상위 세그먼트 조합별 중분류 만족도 비교 (전체 평균 기준선 포함)")
+    top_group = group_means.nlargest(5, "응답자수").copy()
+    melted = top_group.melt(id_vars=segment_cols_filtered + ["응답자수", "조합"], value_vars=midcats,
+                             var_name="중분류", value_name="평균점수")
+    fig_group = px.bar(
+        melted,
+        x="중분류",
+        y="평균점수",
+        color="조합",
+        barmode="group",
+        text="평균점수",
+        title="응답자 수 상위 5개 세그먼트 조합의 중분류별 만족도"
+    )
+    fig_group.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+    # 전체 평균 기준선(중분류별로 facet이 아니라면 아래처럼 보조선은 일반적 참고)
+    for mc in midcats:
+        fig_group.add_hline(
+            y=overall_means[mc],
+            line_dash="dash",
+            annotation_text=f"{mc} 전체 평균",
+            annotation_position="top left"
+        )
+    st.plotly_chart(fig_group, use_container_width=True)
+
+    # --- Slopegraph: 전체 평균 vs 상위 3개 조합 ---
+    st.markdown("### 전체 평균 대비 상위 3개 조합의 중분류 프로파일 변화 (Slopegraph)")
+    def plot_slope_for_combo(row):
+        combo_label = row["조합"]
+        df_slope = pd.DataFrame({
+            "중분류": midcats * 2,
+            "점수": [overall_means[mc] for mc in midcats] + [row[mc] for mc in midcats],
+            "그룹": ["전체 평균"] * len(midcats) + [combo_label] * len(midcats)
+        })
+        fig = px.line(
+            df_slope,
+            x="중분류",
+            y="점수",
+            color="그룹",
+            markers=True,
+            title=f"전체 평균 vs {combo_label}"
+        )
+        fig.update_layout(yaxis_range=[50, 100])
+        return fig
+
+    for _, row in group_means.nlargest(3, "응답자수").iterrows():
+        st.plotly_chart(plot_slope_for_combo(row), use_container_width=True)
+
+    # --- 평균 차이 + 간이 신뢰구간 막대 (예: 특정 중분류별 상위 5개) ---
+    st.markdown("### 전체 평균 대비 편차와 간이 신뢰구간 (중분류별)")
+    import numpy as np
+    for mc in midcats[:2]:  # 부담 줄이려고 첫 두 개만; 필요하면 반복 범위 확장
+        subset = group_means.nlargest(5, "응답자수").copy()
+        subset["delta"] = subset[mc] - overall_means[mc]
+        # 근사 표준오차: p*(1-p)/n 형태를 변형 (점수 범위 0~100이므로 단순화)
+        # 실제로는 개별 응답자 데이터를 bootstrap 하는 게 정확함
+        subset["se"] = np.sqrt((subset[mc] * (100 - subset[mc]) / subset["응답자수"]).clip(lower=0))
+        fig_ci = go.Figure()
+        fig_ci.add_trace(go.Bar(
+            x=subset["조합"],
+            y=subset["delta"],
+            error_y=dict(type="data", array=subset["se"]),
+            name=f"{mc} 편차"
+        ))
+        fig_ci.add_hline(y=0, line_dash="dash", line_color="black")
+        fig_ci.update_layout(
+            title=f"{mc} 전체 평균 대비 편차 (신뢰구간, 상위 5개 조합)",
+            yaxis_title="편차",
+            height=350,
+            margin=dict(t=40, b=60)
+        )
+        st.plotly_chart(fig_ci, use_container_width=True)
+
+    # --- 분포 비교 (Violin) ---
+    st.markdown("### 중분류별 점수 분포 비교 (Violin, 전체 응답자 기준)")
+    # 각 응답자별 중분류 점수 계산 (scale 후 평균)
+    def compute_midcat_per_respondent(df, mid):
+        predicate = MIDDLE_CATEGORY_MAPPING[mid]
+        cols = [c for c in df.columns if predicate(c)]
+        if not cols:
+            return pd.Series([None]*len(df))
+        scaled = df[cols].apply(scale_likert)
+        return scaled.mean(axis=1, skipna=True)
+
+    df2_for_violin = add_derived_columns(df)
+    violin_df = pd.DataFrame({mid: compute_midcat_per_respondent(df2_for_violin, mid) for mid in midcats})
+    # 예: '공간 및 이용편의성'을 세그먼트 첫 기준으로 비교
+    if segment_cols_filtered:
+        seg_col_example = segment_cols_filtered[0]
+        violin_df[seg_col_example] = df2_for_violin[seg_col_example].astype(str)
+        for mid in midcats[:2]:  # 부담 줄이려고 첫 두 개만
+            fig_violin = px.violin(
+                violin_df,
+                y=mid,
+                x=seg_col_example,
+                box=True,
+                points="all",
+                title=f"{mid} 점수 분포 by {seg_col_example}"
+            )
+            st.plotly_chart(fig_violin, use_container_width=True)
+
+    # --- Small Multiples: 중분류별 상위 3개 조합 비교 ---
+    st.markdown("### Small Multiples: 중분류별 세그먼트 조합 비교 (상위 3개)")
+    top3 = group_means.nlargest(3, "응답자수").copy()
+    for mc in midcats:
+        tmp = top3[[*segment_cols_filtered, mc, "응답자수"]].copy()
+        tmp["조합"] = tmp.apply(lambda r: " | ".join([str(r[c]) for c in segment_cols_filtered]), axis=1)
+        fig_small = px.bar(
+            tmp,
+            x="조합",
+            y=mc,
+            text=mc,
+            title=f"{mc} 비교 (상위 3개 세그먼트 조합)"
+        )
+        fig_small.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+        st.plotly_chart(fig_small, use_container_width=True)
+
+    # --- 순위 변화 요약 (전체 평균 대비) ---
+    st.markdown("### 중분류 순위 변화 (전체 평균 대비)")
+    # 상위 몇 개 조합에 대해 텍스트로 보여줌
+    for i, row in rank_change.head(5).iterrows():
+        combo_label = group_means.loc[i, "조합"]
+        changes = row.to_dict()
+        diffs = ", ".join(f"{mc}: {int(changes[mc]):+d}" for mc in midcats)
+        st.write(f"**{combo_label}** 순위 변화: {diffs}")
 
 
     # 8. 통합 표 한 번에 출력
