@@ -1137,9 +1137,15 @@ def page_segment_analysis(df):
         showlegend=True,
         height=500
     )
-    st.plotly_chart(fig, use_container_width=True)
+    # 세그먼트 조합별 응답자 수 표에서 숫자 연령 컬럼(SQ2 등) 제거
+    drop_cols = [c for c in counts.columns if (
+        c.startswith("SQ2") and "GROUP" not in c  # SQ2 중 SQ2_GROUP 아니면 제거
+        ) or (c == "DQ2_YEARS")  # (예시: DQ2 년수도 마찬가지)
+    ]
+    counts_for_display = counts.drop(columns=drop_cols, errors='ignore')
+
     st.markdown("#### 세그먼트 조합별 응답자 수")
-    st.dataframe(counts, use_container_width=True)
+    st.dataframe(counts_for_display, use_container_width=True)
 
 
 # ─────────────────────────────────────────────────────
