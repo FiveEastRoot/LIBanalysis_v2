@@ -826,20 +826,22 @@ def plot_within_category_bar(df, midcategory):
     item_scores = compute_within_category_item_scores(df)
     if midcategory not in item_scores:
         return None, None, None
-    # 원래 컬럼 순서 유지 (역순으로 표시)
+    # 원래 컬럼 순서 유지
     predicate = MIDDLE_CATEGORY_MAPPING[midcategory]
     orig_cols = [c for c in df.columns if predicate(c)]
-    orig_cols_rev = orig_cols[::1]
-    series = item_scores[midcategory].reindex(orig_cols_rev)
+    # 시각화는 역순, 표는 원래 순서
+    orig_cols_rev = orig_cols[::-1]
+    series_plot = item_scores[midcategory].reindex(orig_cols_rev)
+    series_table = item_scores[midcategory].reindex(orig_cols)
     # 중분류 전체 평균
     mid_scores = compute_midcategory_scores(df)
     mid_mean = mid_scores.get(midcategory, None)
-    # 바 차트
+    # 바 차트 (역순으로 된 series_plot)
     fig = go.Figure(go.Bar(
-        x=series.values,
-        y=series.index,
+        x=series_plot.values,
+        y=series_plot.index,
         orientation='h',
-        text=series.round(1),
+        text=series_plot.round(1),
         textposition='outside',
         marker_color='steelblue'
     ))
@@ -847,21 +849,21 @@ def plot_within_category_bar(df, midcategory):
         fig.add_vline(x=mid_mean, line_color="red")
     fig.update_layout(
         title=f"{midcategory} 내 문항별 평균 점수 비교 (0~100 환산)",
-        xaxis_title=f"{midcategory} 평균 {mid_mean:.2f}",
+        xaxis_title=f"{midcategory} 평균 {mid_mean:.2f}" if mid_mean is not None else "평균 점수",
         margin=dict(t=40, b=60)
     )
-    # 하단 표: 항목별 평균 + 편차
+    # 하단 표: 원래 순서로 항목별 평균 + 편차
     if mid_mean is not None:
-        diff = series - mid_mean
+        diff = series_table - mid_mean
         table_df = pd.DataFrame({
-            '평균 점수': series.round(2),
-            '중분류 평균': [round(mid_mean,2)] * len(series),
+            '평균 점수': series_table.round(2),
+            '중분류 평균': [round(mid_mean,2)] * len(series_table),
             '편차 (문항 - 중분류 평균)': diff.round(2)
-        }, index=series.index)
+        }, index=series_table.index)
     else:
         table_df = pd.DataFrame({
-            '평균 점수': series.round(2)
-        }, index=series.index)
+            '평균 점수': series_table.round(2)
+        }, index=series_table.index)
     # 테이블 생성
     table_fig = go.Figure(go.Table(
         header=dict(
@@ -873,8 +875,9 @@ def plot_within_category_bar(df, midcategory):
             align='center'
         )
     ))
-    table_fig.update_layout(margin=dict(t=5, b=5),height=500)
+    table_fig.update_layout(margin=dict(t=5, b=5))
     return fig, table_fig, table_df
+
 
 # ─────────────────────────────────────────────────────
 # ▶️ Streamlit 실행
