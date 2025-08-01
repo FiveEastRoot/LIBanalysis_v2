@@ -126,6 +126,12 @@ def escape_tildes(text: str, mode: str = "html") -> str:
         text = text.replace("~~", r"\~\~")
         return text.replace("~", r"\~")
 
+def safe_markdown(text, **kwargs):
+    # 마크다운 취소선 방지를 위해 ~를 이스케이프
+    safe = escape_tildes(text, mode="markdown")
+    st.markdown(safe, **kwargs)
+
+
 # ─────────────────────────────────────────────────────
 # DataFrame & visualization helpers
 # ─────────────────────────────────────────────────────
@@ -409,7 +415,7 @@ def build_radar_prompt(overall_profile: dict, combos: list):
 2. 서로 뚜렷히 대비되는 두 개의 조합명 쌍을 골라 비교 설명해줘. 각각 어떤 중분류에서 차이가 나는지, 그로부터 어떤 인사이트가 나오는지 구체적으로 서술.
 3. 전체적으로 관찰되는 패턴 3개를 도출해줘. (예: “특정 연령대 조합들이 정보 획득은 높지만 소통에서 일관되게 낮음”처럼 조합 특성 포함)
 4. 전략적 시사점 3개: 어떤 조합을 우선 공략/보완할지, 조합명을 명시하며 구체적 행동 방향을 제안해줘.
-5. 전체 길이는 1000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
+5. 전체 길이는 3000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
 
 스타일: 비즈니스 보고서 톤, 소제목 포함, 숫자는 한 자리 소수, 조합명(예: '여성 | 30-34세')을 모든 설명에 명시하고 ‘조합 1’ 같은 일반명은 쓰지 마."""
     return prompt.strip()
@@ -435,7 +441,7 @@ def build_heatmap_prompt(table_df: pd.DataFrame, midcats: list):
 2. 응답자 수가 충분한 조합명들에서 일관된 강점과 약점을 각각 요약해줘. 예: '여성 | 30-34세'는 정보 획득과 공익성에서 일관되게 높고, 소통 및 정책 활용이 낮음.
 3. 전체적인 중분류별 경향: 어떤 중분류가 전반적으로 높은지/낮은지, 그리고 특정 조합명들이 그 흐름과 어떻게 다른지 설명해줘.
 4. 요약 개요 (한 문단)과, 도출할 수 있는 3개의 구체적인 행동 권장점(조합명을 포함한 우선순위 포함)을 제시해줘.
-5. 전체 길이는 1000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
+5. 전체 길이는 3000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
 
 
 스타일: 비즈니스 리포트 톤, 소제목 포함, 숫자는 한 자리 소수, 조합명을 반복적으로 사용하여 비교·대조 중심으로 작성."""
@@ -459,7 +465,7 @@ def build_delta_prompt(delta_df: pd.DataFrame, midcats: list):
 1. 각 조합명별로 전체 평균 대비 가장 과도하게 높은/낮은 중분류를 명확히 짚어줘. 예: '여성 | 30-34세는 정보 획득에서 +12.3으로 강점이나, 소통 및 정책 활용에서는 -9.5로 약점'처럼.
 2. 여러 조합명이 반복해서 비슷한 편차 패턴(예: 동일하게 특정 중분류가 낮거나 높은)을 보이는지 그룹화하여 설명해줘. 구체적인 조합명들을 묶어 비교.
 3. 개선/확장 우선순위를 조합명 기준으로 추천해줘. (예: '소통 및 정책 활용이 반복적으로 낮은 조합명들부터 개선해야 하며, 중분류 평균 대비 높고 빈번한 조합명들에 대해 확장 전략 고려' 등)
-4. 전체 길이는 1000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
+4. 전체 길이는 3000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
 
 
 스타일: 간결한 비즈니스 요약, 소제목 포함, 숫자는 한 자리 소수, 조합명 명시 중심."""
@@ -484,7 +490,7 @@ def build_ci_prompt(subset_df: pd.DataFrame, mc: str):
 1. 어떤 조합명들의 편차가 0 기준선과 비교해 실질적으로 의미 있어 보이는지 설명해줘. (예: 표준오차에 비해 편차가 충분히 큰지 여부를 조합명별로 판단)
 2. 편차가 크지만 불확실성이 큰 조합명과, 편차는 작지만 안정적인 조합명을 조합명 기준으로 구분하여 비교 설명해줘.
 3. 우선 개입하거나 주목해야 할 조합명 3개를 추천해줘. 각각 왜 우선순위인지(편차/불확실성 관점) 구체적으로 써줘.
-4. 전체 길이는 1000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
+4. 전체 길이는 3000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
 
 
 스타일: 비즈니스 리포트 톤, 소제목 포함, 숫자는 한 자리 소수, 조합명을 반복 명시하여 읽는 사람이 바로 어떤 그룹인지 알 수 있게 작성."""
@@ -511,7 +517,7 @@ def build_small_multiple_prompt(top_df: pd.DataFrame, midcat: str, segment_cols_
 1. 중분류 '{midcat}'에서 조합명들 간 점수 분포와 순위 변동성이 어떤지 요약해줘. (예: 어떤 조합명이 일관되게 상위인지, 어떤 조합명은 변동성이 크며 불안정한지)
 2. 특징적인 outlier 조합명들을 지적하고, 그들이 왜 예외적인지 설명해줘. (예: 다른 조합명들보다 훨씬 높거나 낮은 경우)
 3. 일관성 있는 강점/약점을 보이는 조합명 그룹이 있다면 묶어서 설명해줘. (예: '30~34세 여성' 계열이 정보 획득은 높지만 소통이 낮은 패턴)
-4. 전체 길이는 1000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
+4. 전체 길이는 3000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
 
 
 스타일: 짧고 명확한 비즈니스 요약, 소제목 포함, 숫자는 한 자리 소수, 조합명을 반복하여 비교 중심으로 작성."""
@@ -1247,6 +1253,11 @@ def page_segment_analysis(df):
     - 선택한 보기 조합별(응답자 5명 이상)로 Q1~Q6, Q9-D-3, 공익성/기여도(Q7,Q8) 중분류별 만족도 평균을 **히트맵**으로 비교
     """)
 
+    def safe_markdown(text, **kwargs):
+        # 마크다운 해석에 따른 취소선 방지 (~ → \~ 또는 대체)
+        escaped = escape_tildes(text, mode="markdown").replace("~~", r"\~\~")
+        st.markdown(escaped, **kwargs)
+
     seg_labels = [o["label"] for o in SEGMENT_OPTIONS]
     sel = st.multiselect("세그먼트 조건 (최대 3개)", seg_labels, default=seg_labels[:2], max_selections=3)
     if not sel:
@@ -1320,18 +1331,15 @@ def page_segment_analysis(df):
     counts_merge = counts[merge_keys + ["응답자수"]]
     group_means = pd.merge(group_means, counts_merge, how='left', on=merge_keys)
 
+    # 중분류 평균 및 전체 평균 대비 편차
     group_means["중분류평균"] = group_means[midcats].mean(axis=1).round(2)
     overall_means = group_means[midcats].mean(axis=0)
     overall_mean_of_means = overall_means.mean()
     group_means["전체평균대비편차"] = (group_means["중분류평균"] - overall_mean_of_means).round(2)
 
-    table_cols = segment_cols_filtered + midcats + ["중분류평균", "전체평균대비편차", "응답자수"]
-    table_with_stats = group_means[table_cols]
-
     st.markdown("### 응답자 수 기준 상위 10개 세그먼트 조합의 중분류 만족도 프로파일 비교")
     top_n = 10
     top_df = group_means.nlargest(top_n, "응답자수").copy()
-    midcats = list(MIDCAT_MAP.keys())
 
     overall_profile = group_means[midcats].mean(axis=0)
     overall_vals = [overall_profile.get(mc, overall_profile.mean()) for mc in midcats]
@@ -1347,7 +1355,6 @@ def page_segment_analysis(df):
         line=dict(dash="dash", width=5, color="black"),
         opacity=0.5
     ))
-
 
     colors = DEFAULT_PALETTE
     for i, (_, row) in enumerate(top_df.iterrows()):
@@ -1372,16 +1379,15 @@ def page_segment_analysis(df):
         legend=dict(orientation="v", y=0.85, x=1.02)
     )
     st.plotly_chart(fig_radar, use_container_width=True)
+
     # 룰 기반 요약
     st.markdown("#### 룰 기반 요약")
-    # 전체 평균 프로파일
     overall_profile_dict = {mc: overall_profile.get(mc, 0) for mc in midcats}
     high_low_summary = interpret_midcategory_scores(df) if 'interpret_midcategory_scores' in globals() else ""
-    st.write(high_low_summary)
+    safe_markdown(high_low_summary)
 
-    # GPT 기반 해석
+    # GPT 기반 해석 (레이더)
     st.markdown("#### GPT 생성형 해석")
-    # 조합 데이터 직렬화
     combos = []
     for _, row in top_df.iterrows():
         combo_label = " | ".join([str(row[c]) for c in segment_cols_filtered])
@@ -1389,31 +1395,15 @@ def page_segment_analysis(df):
         combos.append({"label": combo_label, "n": int(row["응답자수"]), "profile": profile})
     prompt = build_radar_prompt(overall_profile_dict, combos)
     insight_text = call_gpt_for_insight(prompt)
+    insight_text = insight_text.replace("~", "-")
     render_insight_card("GPT 생성형 해석", insight_text, key="segment-radar")
 
-
-    overall_means = group_means[midcats].mean(axis=0)
-    for mc in midcats:
-        group_means[f"{mc}_delta"] = group_means[mc] - overall_means[mc]
-    ref_rank = overall_means.rank(ascending=False)
-    rank_df = group_means[[mc for mc in midcats]].rank(ascending=False, axis=1)
-    rank_change = rank_df.subtract(ref_rank, axis=1)
+    # 조합명 생성 및 delta 계산 (전체 평균 기준)
     group_means["조합"] = group_means.apply(lambda r: " | ".join([str(r[c]) for c in segment_cols_filtered]), axis=1)
-
-#히트맵
-    # 전체 평균 (중분류별) 재계산 (중복 없이 하나만)
-    overall_means = group_means[midcats].mean(axis=0)
-
-    # Delta 컬럼 추가
     for mc in midcats:
         group_means[f"{mc}_delta"] = group_means[mc] - overall_means[mc]
 
-    # 조합명 생성
-    group_means["조합"] = group_means.apply(
-        lambda r: " | ".join([str(r[c]) for c in segment_cols_filtered]),
-        axis=1
-    )
-
+    # 히트맵: 중분류 평균
     st.markdown("### 히트맵 + 전체 평균 대비 중분류별 편차 히트맵")
     heatmap_plot = group_means.set_index("조합")[midcats]
     fig_abs = px.imshow(
@@ -1427,19 +1417,16 @@ def page_segment_analysis(df):
     st.plotly_chart(fig_abs, use_container_width=True)
 
     st.markdown("#### 히트맵 룰 기반 요약")
-    # 중분류별 평균 테이블 준비 (index가 조합, 포함된 midcats)
-    heatmap_table = group_means.copy()
-    # '조합' 컬럼이 생성되어 있으므로 그대로 사용
     st.write("**전체 평균 대비 중분류 평균 프로파일**")
-    # GPT 해석
+
     st.markdown("#### GPT 생성형 해석 (히트맵)")
-    prompt_heat = build_heatmap_prompt(heatmap_table[[*segment_cols_filtered, *midcats, "응답자수"]].rename(columns={"응답자수": "응답자수"}), midcats)
+    heatmap_table = group_means[[*segment_cols_filtered, *midcats, "응답자수"]]
+    prompt_heat = build_heatmap_prompt(heatmap_table.rename(columns={"응답자수": "응답자수"}), midcats)
     heat_insight = call_gpt_for_insight(prompt_heat)
+    heat_insight = heat_insight.replace("~", "-")
     render_insight_card("GPT 생성형 해석 (히트맵)", heat_insight, key="heatmap-insight")
 
-
-#델타 히트맵
-
+    # 델타 히트맵
     delta_plot = group_means.set_index("조합")[[f"{mc}_delta" for mc in midcats]]
     delta_plot.columns = midcats
     fig_delta = px.imshow(
@@ -1453,7 +1440,6 @@ def page_segment_analysis(df):
     st.plotly_chart(fig_delta, use_container_width=True)
 
     st.markdown("#### Delta 히트맵 룰 기반 요약")
-    # 룰 기반: 평균 대비 가장 큰 플러스/마이너스 조합 추출
     delta_summary_parts = []
     for mc in midcats:
         col_delta = f"{mc}_delta"
@@ -1464,12 +1450,13 @@ def page_segment_analysis(df):
                 delta_summary_parts.append(f"{mc}에서 가장 높은 편차: {top_pos.iloc[0]['조합']} (+{top_pos.iloc[0][col_delta]:.1f})")
             if not top_neg.empty:
                 delta_summary_parts.append(f"{mc}에서 가장 낮은 편차: {top_neg.iloc[0]['조합']} ({top_neg.iloc[0][col_delta]:.1f})")
-    st.write("；".join(delta_summary_parts) if delta_summary_parts else "의미 있는 편차를 발견하지 못했습니다.")
+    st.text("；".join(delta_summary_parts) if delta_summary_parts else "의미 있는 편차를 발견하지 못했습니다.")
 
     st.markdown("#### GPT 생성형 해석 (Delta)")
     delta_df_for_prompt = group_means.set_index("조합")
     prompt_delta = build_delta_prompt(delta_df_for_prompt, midcats)
     delta_insight = call_gpt_for_insight(prompt_delta)
+    delta_insight = delta_insight.replace("~", "-")
     render_insight_card("GPT 생성형 해석 (델타 히트맵)", delta_insight, key="delta-heatmap-insight")
 
 #신뢰구간 포함 편차 바 차트 해석
@@ -1506,7 +1493,7 @@ def page_segment_analysis(df):
             ci_upper = delta + se
             signif = "유의미" if not (ci_lower <= 0 <= ci_upper) else "불확실"
             ci_summary.append(f"{combo}: 편차 {delta:.1f}, SE {se:.2f} ({signif})")
-        st.write("；".join(ci_summary))
+        safe_markdown("；".join(ci_summary))
 
         st.markdown("#### GPT 생성형 해석 (신뢰구간)")
         prompt_ci = build_ci_prompt(subset_local, mc)
