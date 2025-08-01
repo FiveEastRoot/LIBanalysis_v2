@@ -18,7 +18,8 @@ from itertools import cycle
 # 로깅 설정 (필요시 파일로도 남기게 조정 가능)
 logging.basicConfig(level=logging.INFO)
 
-openai.api_key = st.secrets["openai"]["api_key"]
+openai.api_key = st.secrets["openai"]["api_key"]git add .gitignore requirements.txt
+
 client = openai.OpenAI(api_key=openai.api_key)
 
 # 기본 색상 팔레트
@@ -919,8 +920,6 @@ def handle_nl_question(df: pd.DataFrame, question: str):
     else:
         st.info("생성할 차트가 없습니다.")
 
-    explanation = generate_explanation_from_spec(df_filtered, spec, computed_metrics)
-    render_insight_card("자연어 기반 설명", explanation, key="nlq-insight")
 
 
 # ─────────────────────────────────────────────────────
