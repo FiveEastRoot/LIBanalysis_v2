@@ -327,22 +327,32 @@ def extract_keyword_and_audience(responses, batch_size=20):
     return results
 
 
-def call_gpt_for_insight(prompt, temperature=0.25, max_tokens=400):
-    try:
-        resp = client.chat.completions.create(
-            model="gpt-4.1-nano",
-            messages=[
-                {"role": "system", "content": "너는 전략 리포트 작성자이며, 주어진 데이터를 바탕으로 명확하고 간결한 인사이트를 제공해야 한다."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        content = resp.choices[0].message.content.strip()
-        return content
-    except Exception as e:
-        logging.warning(f"GPT 호출 실패: {e}")
-        return f"GPT 해석 생성에 실패했습니다: {e}"
+def call_gpt_with_fallback(prompt, system_msg="사용자는 공공도서관 설문 결과에 대한 인사이트를 원합니다. 핵심 패턴, 이상치, 비교 포인트를 간결하게 설명해 주세요.", 
+                           preferred_models=None, temperature=0.3, max_tokens=400):
+    # 모델은 gpt-4.1-nano로 고정, 다른 모델 사용하지 않음
+    if preferred_models is None:
+        preferred_models = ["gpt-4.1-nano", "gpt-3.5-turbo"]
+    last_error = None
+    for model in preferred_models:
+        try:
+            resp = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            content = resp.choices[0].message.content.strip()
+            return content, model, None  # 성공한 모델 이름도 반환
+        except Exception as e:
+            logging.warning(f"GPT 호출 실패 (model={model}): {e}")
+            last_error = (model, e)
+    # 모두 실패
+    err_msg = f"GPT 생성형 해석 생성에 실패했습니다: 마지막 시도 모델={last_error[0]}, error={last_error[1]}"
+    return err_msg, None, last_error[1]
+
 
 def build_radar_prompt(overall_profile: dict, combos: list):
     # combos: list of dicts with keys: label, n, profile (dict of midcat->score)
