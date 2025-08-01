@@ -864,6 +864,188 @@ def handle_nl_question(df: pd.DataFrame, question: str):
         st.warning("필터 적용 결과 데이터가 없습니다. 조건을 조정해보세요.")
         return
 
+    # 참고한 문항 추출 (이후 설명/프롬프트 컨텍스트와 UI용)
+    try:
+        questions_used_full, questions_used_codes = get_questions_used(spec, df, df_filtered)
+    except NameError:
+        questions_used_full, questions_used_codes = [], []
+
+    if questions_used_codes:
+        # 중복 제거하되 순서 유지
+        seen = set()
+        unique_codes = []
+        for c in questions_used_codes:
+            if c not in seen:
+                seen.add(c)
+                unique_codes.append(c)
+        st.markdown("**참고한 문항 (문항번호만):** " + ", ".join(unique_codes))
+    if questions_used_full:
+        st.markdown("**참고한 전체 문항명:** " + ", ".join(questions_used_full))
+
+    # 중분류 관련 주요 지표 (필터된 대상)
+    overall_mid_scores = compute_midcategory_scores(df_filtered)
+    overall_mid_dict = {k: float(v) for k, v in overall_mid_scores.items()} if not overall_mid_scores.empty else {}
+
+    # 전체 평균 대비 (원래 전체 데이터 기준)
+    global_mid_scores = compute_midcategory_scores(df)
+    deltas = {}
+    for k in overall_mid_dict:
+        base = float(global_mid_scores.get(k, overall_mid_dict.get(k, 0)))
+        deltas[k] = overall_mid_dict.get(k, 0) - base
+
+    # 상위 조합/세그먼트 추출
+    top_segments = []
+    gb = spec.get("groupby")
+    if gb and gb in df_filtered.columns:
+        counts = df_filtered[gb].astype(str).value_counts().nlargest(3)
+        for label, n in counts.items():
+            subset = df_filtered[df_filtered[gb].astype(str) == label]
+            profile = compute_midcategory_scores(subset)
+            top_segments.append({
+                "label": f"{gb}={label}",
+                "n": int(n),
+                "profile": {k: float(v) for k, v in profile.items()}
+            })
+    else:
+        top_segments.append({
+            "label": "필터된 전체",
+            "n": len(df_filtered),
+            "profile": overall_mid_dict
+        })
+
+    computed_metrics = {
+        "overall_mid_scores": overall_mid_dict,
+        "deltas": deltas,
+        "top_segments": top_segments,
+        "questions_used_full": questions_used_full,
+        "questions_used_codes": questions_used_codes
+    }
+
+    # 차트 유형 결정 및 시각화
+    chart_type = infer_chart_type(spec, df_filtered)
+    chart = None
+
+    if chart_type == "radar":
+        fig = go.Figure()
+        midcats = list(overall_mid_scores.index)
+        if not midcats:
+            st.warning("중분류 점수를 계산할 수 없습니다.")
+        else:
+            global_vals = [float(global_mid_scores.get(m, 0)) for m in midcats]
+            global_closed = global_vals + [global_vals[0]]
+            cats_closed = midcats + [midcats[0]]
+            fig.add_trace(go.Scatterpolar(
+                r=global_closed,
+                theta=cats_closed,
+                fill=None,
+                name="전체 평균",
+                line=dict(dash="dash", width=2),
+                opacity=0.6
+            ))
+            vals = [float(overall_mid_scores.get(m, 0)) for m in midcats]
+            vals_closed = vals + [vals[0]]
+            fig.add_trace(go.Scatterpolar(
+                r=vals_closed,
+                theta=cats_closed,
+                fill='toself',
+                name="질의 대상",
+                hovertemplate="%{theta}: %{r:.1f}<extra></extra>"
+            ))
+            fig.update_layout(
+                polar=dict(radialaxis=dict(range=[0, 100])),
+                title="중분류 만족도 프로파일 비교 (전체 평균 vs 대상)",
+                height=450
+            )
+            chart = fig
+
+    elif chart_type == "heatmap":
+        matrix = {}
+        for mid, predicate in MIDDLE_CATEGORY_MAPPING.items():
+            cols = [c for c in df_filtered.columns if predicate(c)]
+            if not cols:
+                continue
+            vals = df_filtered[cols].apply(pd.to_numeric, errors='coerce')
+            if vals.empty:
+                continue
+            matrix[mid] = round(100 * (vals.mean(axis=1, skipna=True) - 1) / 6).mean()
+        if matrix:
+            hm_df = pd.DataFrame.from_dict(matrix, orient="index", columns=["평균점수"])
+            fig = px.imshow(
+                hm_df.T,
+                text_auto=True,
+                aspect="auto",
+                color_continuous_scale="Blues",
+                title="중분류 평균 히트맵 (질의 대상 기준)",
+                labels=dict(x="중분류", y="", color="점수")
+            )
+            chart = fig
+
+    elif chart_type in ("grouped_bar", "bar"):
+        x = spec.get("x")
+        groupby = spec.get("groupby")
+        if groupby and groupby in df_filtered.columns:
+            rows = []
+            midcats = list(MIDDLE_CATEGORY_MAPPING.keys())
+            for val, sub in df_filtered.groupby(df_filtered[groupby].astype(str)):
+                scores = compute_midcategory_scores(sub)
+                for m in scores.index:
+                    rows.append({
+                        groupby: val,
+                        "중분류": m,
+                        "만족도": float(scores.get(m, 0)),
+                        "전체 평균": float(global_mid_scores.get(m, 0))
+                    })
+            if rows:
+                plot_df = pd.DataFrame(rows)
+                fig = px.bar(
+                    plot_df,
+                    x="중분류",
+                    y="만족도",
+                    color=groupby,
+                    barmode="group",
+                    title=f"{groupby}별 중분류 만족도 비교",
+                    text="만족도"
+                )
+                avg_df = plot_df.drop_duplicates(subset=["중분류"])[["중분류", "전체 평균"]]
+                fig.add_trace(go.Scatter(
+                    x=avg_df["중분류"],
+                    y=avg_df["전체 평균"],
+                    mode="lines+markers",
+                    name="전체 평균",
+                    line=dict(dash="dash"),
+                    hovertemplate="%{x}: %{y:.1f}<extra></extra>"
+                ))
+                fig.update_traces(texttemplate="%{text:.1f}", textposition="outside")
+                chart = fig
+        elif x and x in df_filtered.columns:
+            cnt = df_filtered[x].astype(str).value_counts().reset_index()
+            cnt.columns = [x, "count"]
+            fig = px.bar(cnt, x=x, y="count", title=f"{x} 분포", text="count")
+            fig.update_traces(textposition="outside")
+            chart = fig
+
+    else:
+        st.warning("자동으로 적절한 시각화를 추론하지 못했습니다.")
+
+    if chart is not None:
+        st.plotly_chart(chart, use_container_width=True)
+    else:
+        st.info("생성할 차트가 없습니다.")
+
+    # 설명 생성
+    explanation = generate_explanation_from_spec(df_filtered, spec, computed_metrics)
+    render_insight_card("자연어 기반 설명", explanation, key="nlq-insight")
+
+    st.markdown("## 자연어 질의 결과")
+    st.markdown(f"**질의:** {question}")
+
+    spec = parse_nl_query_to_spec(question)
+    df_filtered = apply_filters(df, spec.get("filters", []))
+
+    if df_filtered.empty:
+        st.warning("필터 적용 결과 데이터가 없습니다. 조건을 조정해보세요.")
+        return
+
     # 중분류 관련 주요 지표
     overall_mid_scores = compute_midcategory_scores(df_filtered)
     overall_mid_dict = {k: float(v) for k, v in overall_mid_scores.items()} if not overall_mid_scores.empty else {}
