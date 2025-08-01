@@ -8,6 +8,7 @@ import re
 import openai
 import json 
 import math
+import streamlit.components.v1 as components
 import logging
 from itertools import cycle
 
@@ -166,10 +167,19 @@ def render_chart_and_table(bar, table, title, key_prefix=""):
 def show_table(df, caption):
     st.dataframe(df)
 
+
 def render_insight_card(title: str, content: str, key: str = None):
-    # HTML 컨텍스트용 escape 처리
+    # content가 None일 수 있으니 문자열로 보장
+    if content is None:
+        content = "(내용 없음)"
+    content = str(content)
+    # HTML용 escape 및 줄바꿈 처리
     content_html = escape_tildes(content, mode="html").replace("\n", "<br>")
-    st.markdown(f"""
+    # 높이 추정: 줄 수 기반 (최대 제한)
+    line_count = content.count("\n") + 3
+    height = min(800, 70 + 20 * line_count)
+
+    html = f"""
     <div style="
         border:1px solid #e2e8f0;
         border-radius:12px;
@@ -182,7 +192,9 @@ def render_insight_card(title: str, content: str, key: str = None):
         <h4 style="margin:0 0 8px 0; font-size:1.1rem;">{title}</h4>
         <div style="font-size:0.95em; line-height:1.4em;">{content_html}</div>
     </div>
-    """, unsafe_allow_html=True, key=key)
+    """
+    # 고유한 key를 주는 것이 안전하므로 호출부에서 중복 안 나도록 주의
+    components.html(html, height=height, key=key)
 
 
 # ─────────────────────────────────────────────────────
@@ -1371,6 +1383,7 @@ def page_segment_analysis(df):
     insight_text = call_gpt_for_insight(prompt)
     render_insight_card("GPT 생성형 해석", insight_text, key="segment-radar")
 
+
     overall_means = group_means[midcats].mean(axis=0)
     for mc in midcats:
         group_means[f"{mc}_delta"] = group_means[mc] - overall_means[mc]
@@ -1414,7 +1427,7 @@ def page_segment_analysis(df):
     st.markdown("#### GPT 생성형 해석 (히트맵)")
     prompt_heat = build_heatmap_prompt(heatmap_table[[*segment_cols_filtered, *midcats, "응답자수"]].rename(columns={"응답자수": "응답자수"}), midcats)
     heat_insight = call_gpt_for_insight(prompt_heat)
-    render_insight_card("GPT 생성형 해석 (히트맵)", heat_insight, key="heatmap")
+    render_insight_card("GPT 생성형 해석 (히트맵)", heat_insight, key="heatmap-insight")
 
 
 #델타 히트맵
@@ -1449,7 +1462,7 @@ def page_segment_analysis(df):
     delta_df_for_prompt = group_means.set_index("조합")
     prompt_delta = build_delta_prompt(delta_df_for_prompt, midcats)
     delta_insight = call_gpt_for_insight(prompt_delta)
-    render_insight_card("GPT 생성형 해석 (델타 히트맵)", delta_insight, key="heatmap")
+    render_insight_card("GPT 생성형 해석 (델타 히트맵)", delta_insight, key="delta-heatmap-insight")
 
 #신뢰구간 포함 편차 바 차트 해석
 
@@ -1490,7 +1503,7 @@ def page_segment_analysis(df):
         st.markdown("#### GPT 생성형 해석 (신뢰구간)")
         prompt_ci = build_ci_prompt(subset_local, mc)
         ci_insight = call_gpt_for_insight(prompt_ci)
-        render_insight_card("GPT 생성형 해석 (신뢰구간)",ci_insight, key="heatmap")
+        render_insight_card("GPT 생성형 해석 (신뢰구간)", ci_insight, key="ci-insight")
 
 def show_basic_strategy_insights(df):
     st.subheader("1. 이용 목적 (DQ4 계열) × 전반 만족도 (중분류 기준 레이더)")
