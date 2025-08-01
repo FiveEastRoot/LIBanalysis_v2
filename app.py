@@ -524,6 +524,304 @@ def build_small_multiple_prompt(top_df: pd.DataFrame, midcat: str, segment_cols_
     return prompt.strip()
 
 
+# ---------- 자연어 질의 기반 자동 시각화 + 인사이트 파이프라인 ----------
+
+def parse_nl_query_to_spec(question: str):
+    system_prompt = """
+너는 설문 데이터에 대한 자연어 질의를 받아서 시각화/분석 스펙을 구조화된 JSON으로 바꾸는 파서야.
+출력은 오직 JSON 객체 하나만, 코드블럭 없이 반환해. 아래 필드들을 채워줘. 모르겠으면 null 또는 빈리스트로.
+
+필드 예시:
+{
+  "chart": "bar" / "line" / "heatmap" / "radar" / null,
+  "x": "컬럼명 또는 중분류 이름",
+  "y": null,
+  "groupby": "컬럼명 (비교 기준)",
+  "filters": [ {"col": "이용형태", "op": "contains", "value": "혼자"}, ... ],
+  "focus": "설명에서 중점적으로 다룰 포인트 (예: 전체 평균 대비 강점/약점, 연령대 분포 등)"
+}
+
+예시 질의와 기대 스펙:
+1. "혼자 이용하는 사람들의 연령대 분포 보여주고, 주로 가는 도서관별 중분류 만족도 비교해줘."
+   -> filters에 '혼자' 관련, x에 연령대(SQ2_GROUP), groupby에 주 이용 도서관, chart는 비교면 grouped_bar, focus에 "혼자 이용자 연령대 및 도서관별 중분류 만족도 강약점".
+2. "전체 평균 대비 어떤 중분류가 강점인지 레이더로 보여줘."
+   -> chart: "radar", focus: "전체 평균 대비 중분류 강점/약점 비교".
+3. "주이용서비스별 정보 획득과 소통 만족도 비교해줘."
+   -> groupby: 주이용서비스 컬럼, x: 중분류 이름, focus: "서비스별 정보 획득 vs 소통 비교".
+"""
+    resp = safe_chat_completion(
+        model="gpt-4.1-nano",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": question}
+        ],
+        temperature=0.2,
+        max_tokens=300
+    )
+    content = resp.choices[0].message.content.strip()
+    content = re.sub(r"^```|```$", "", content).strip()
+    try:
+        spec = json.loads(content)
+    except Exception:
+        # fallback 기본 스펙
+        spec = {
+            "chart": None,
+            "x": None,
+            "y": None,
+            "groupby": None,
+            "filters": [],
+            "focus": question
+        }
+    return spec
+
+def infer_chart_type(spec: dict, df_subset: pd.DataFrame):
+    # chart이 주어져 있지 않으면 스펙 + 키워드로 추론
+    chart = spec.get("chart")
+    focus = spec.get("focus", "").lower() if spec.get("focus") else ""
+    groupby = spec.get("groupby")
+    x = spec.get("x")
+    y = spec.get("y")
+
+    if chart:
+        return chart  # 명시적이면 그대로
+
+    # 전체 평균 대비, 강점/약점 언급: radar + delta 우선
+    if any(k in focus for k in ["전체 평균 대비", "강점", "약점", "비교"]):
+        if groupby or x is None:
+            return "radar"
+        if x and not groupby:
+            return "delta_bar"
+
+    # groupby + 중분류 비교
+    if groupby and (("중분류" in (x or "").lower()) or "만족도" in (focus or "").lower()):
+        return "grouped_bar"
+
+    # 분포 관련
+    if any(k in focus for k in ["분포", "연령대", "비율", "많이"]):
+        if x:
+            return "bar"
+
+    # 패턴, 군집 -> heatmap
+    if any(k in focus for k in ["패턴", "군집", "비슷한", "차이"]):
+        return "heatmap"
+
+    # default fallback
+    return "bar"
+
+def generate_explanation_from_spec(df_subset: pd.DataFrame, spec: dict, computed_metrics: dict):
+    focus = spec.get("focus", "기본 요약")
+    parts = []
+    if "overall_mid_scores" in computed_metrics:
+        mids = computed_metrics["overall_mid_scores"]
+        parts.append("전체 중분류 평균: " + ", ".join(f"{k} {v:.1f}" for k, v in mids.items()))
+    if "deltas" in computed_metrics:
+        deltas = computed_metrics["deltas"]
+        delta_str = ", ".join(f"{k} {v:+.1f}" for k, v in deltas.items())
+        parts.append("전체 평균 대비 편차: " + delta_str)
+    if "top_segments" in computed_metrics:
+        top = computed_metrics["top_segments"]
+        parts.append("주요 세그먼트/조합: " + "; ".join(f"{t['label']} (n={t['n']})" for t in top))
+
+    summary_context = "\n".join(parts)
+    prompt = f"""
+너는 전략 리포트 작성자다. 아래 컨텍스트와 사용자 질의 포커스를 참고해 명확한 인사이트를 만들어줘.
+
+사용자 질의 포커스: {spec.get('focus', '')}
+
+데이터 요약:
+{summary_context}
+
+요청:
+1. 주요 관찰 패턴 2~3개를 기술해줘.
+2. 강점과 약점을 구체적으로 조합명이나 항목명을 쓰면서 숫자와 함께 설명해줘.
+3. 우선 개입/확장할만한 행동 제안 2개를 제시해줘.
+4. 전체 길이 500~1000자, 비즈니스 톤, 숫자는 한 자리 소수, '~' 대신 '-' 사용.
+
+출력만 텍스트로 해줘.
+"""
+    explanation = call_gpt_for_insight(prompt)
+    return explanation.replace("~", "-")
+
+def apply_filters(df: pd.DataFrame, filters: list):
+    dff = df.copy()
+    for f in filters:
+        col = f.get("col")
+        op = f.get("op", "==")
+        val = f.get("value")
+        if col not in dff.columns or val is None:
+            continue
+        if op in ("==", "="):
+            dff = dff[dff[col].astype(str) == str(val)]
+        elif op == "in" and isinstance(val, list):
+            dff = dff[dff[col].astype(str).isin([str(v) for v in val])]
+        elif op == "contains":
+            dff = dff[dff[col].astype(str).str.contains(str(val), na=False)]
+    return dff
+
+def handle_nl_question(df: pd.DataFrame, question: str):
+    st.markdown("## 자연어 질의 결과")
+    st.markdown(f"**질의:** {question}")
+
+    spec = parse_nl_query_to_spec(question)
+    df_filtered = apply_filters(df, spec.get("filters", []))
+
+    if df_filtered.empty:
+        st.warning("필터 적용 결과 데이터가 없습니다. 조건을 조정해보세요.")
+        return
+
+    # 중분류 관련 주요 지표
+    overall_mid_scores = compute_midcategory_scores(df_filtered)
+    overall_mid_dict = {k: float(v) for k, v in overall_mid_scores.items()} if not overall_mid_scores.empty else {}
+
+    # 전체 평균 대비 (원래 전체 데이터 기준)
+    global_mid_scores = compute_midcategory_scores(df)
+    deltas = {}
+    for k in overall_mid_dict:
+        base = float(global_mid_scores.get(k, overall_mid_dict.get(k, 0)))
+        deltas[k] = overall_mid_dict.get(k, 0) - base
+
+    # 상위 조합/세그먼트 추출 (간단: groupby가 있으면 그 그룹별 개수)
+    top_segments = []
+    gb = spec.get("groupby")
+    if gb and gb in df_filtered.columns:
+        counts = df_filtered[gb].astype(str).value_counts().nlargest(3)
+        for label, n in counts.items():
+            subset = df_filtered[df_filtered[gb].astype(str) == label]
+            profile = compute_midcategory_scores(subset)
+            top_segments.append({"label": f"{gb}={label}", "n": int(n), "profile": {k: float(v) for k, v in profile.items()}})
+    else:
+        top_segments.append({"label": "필터된 전체", "n": len(df_filtered), "profile": overall_mid_dict})
+
+    computed_metrics = {
+        "overall_mid_scores": overall_mid_dict,
+        "deltas": deltas,
+        "top_segments": top_segments
+    }
+
+    # 차트 유형 결정
+    chart_type = infer_chart_type(spec, df_filtered)
+
+    chart = None
+    # 시각화 생성 (간단한 규칙 기반)
+    if chart_type == "radar":
+        # 전체 평균 + 필터된 세그먼트 레이더
+        fig = go.Figure()
+        midcats = list(overall_mid_scores.index)
+        if not midcats:
+            st.warning("중분류 점수를 계산할 수 없습니다.")
+        else:
+            # 전체 평균 (원본 전체)
+            global_vals = [float(global_mid_scores.get(m, 0)) for m in midcats]
+            global_closed = global_vals + [global_vals[0]]
+            cats_closed = midcats + [midcats[0]]
+            fig.add_trace(go.Scatterpolar(
+                r=global_closed,
+                theta=cats_closed,
+                fill=None,
+                name="전체 평균",
+                line=dict(dash="dash", width=2),
+                opacity=0.6
+            ))
+            # 필터된
+            vals = [float(overall_mid_scores.get(m, 0)) for m in midcats]
+            vals_closed = vals + [vals[0]]
+            fig.add_trace(go.Scatterpolar(
+                r=vals_closed,
+                theta=cats_closed,
+                fill='toself',
+                name="질의 대상",
+                hovertemplate="%{theta}: %{r:.1f}<extra></extra>"
+            ))
+            fig.update_layout(
+                polar=dict(radialaxis=dict(range=[0, 100])),
+                title="중분류 만족도 프로파일 비교 (전체 평균 vs 대상)",
+                height=450
+            )
+            chart = fig
+
+    elif chart_type == "heatmap":
+        # 중분류 평균 히트맵 (필터된)
+        midcat_prefixes = list(MIDCAT_MAP.values())
+        heat_df = df_filtered.copy()
+        matrix = {}
+        for mc, prefix in MIDCAT_MAP.items():
+            if isinstance(prefix, list):
+                cols = sum([ [c for c in heat_df.columns if c.startswith(p)] for p in prefix], [])
+            else:
+                cols = [c for c in heat_df.columns if c.startswith(prefix)]
+            if not cols:
+                continue
+            vals = heat_df[cols].apply(pd.to_numeric, errors="coerce")
+            matrix[mc] = round(100 * (vals.mean(axis=1, skipna=True) - 1) / 6).mean() if not vals.empty else None
+        if matrix:
+            hm_df = pd.DataFrame.from_dict(matrix, orient="index", columns=["평균점수"])
+            fig = px.imshow(
+                hm_df.T,
+                text_auto=True,
+                aspect="auto",
+                color_continuous_scale="Blues",
+                title="중분류 평균 히트맵 (질의 대상 기준)",
+                labels=dict(x="중분류", y="", color="점수")
+            )
+            chart = fig
+
+    elif chart_type in ("grouped_bar", "bar"):
+        # 기본 x 기준 막대 or groupby+중분류 비교
+        x = spec.get("x")
+        groupby = spec.get("groupby")
+        if groupby and groupby in df_filtered.columns:
+            # groupby별 중분류 만족도 비교
+            rows = []
+            midcats = list(MIDDLE_CATEGORY_MAPPING.keys())
+            for val, sub in df_filtered.groupby(df_filtered[groupby].astype(str)):
+                scores = compute_midcategory_scores(sub)
+                for m in scores.index:
+                    rows.append({
+                        groupby: val,
+                        "중분류": m,
+                        "만족도": float(scores.get(m, 0)),
+                        "전체 평균": float(global_mid_scores.get(m, 0))
+                    })
+            if rows:
+                plot_df = pd.DataFrame(rows)
+                fig = px.bar(
+                    plot_df,
+                    x="중분류",
+                    y="만족도",
+                    color=groupby,
+                    barmode="group",
+                    title=f"{groupby}별 중분류 만족도 비교",
+                    text="만족도"
+                )
+                avg_df = plot_df.drop_duplicates(subset=["중분류"])[["중분류", "전체 평균"]]
+                fig.add_trace(go.Scatter(
+                    x=avg_df["중분류"],
+                    y=avg_df["전체 평균"],
+                    mode="lines+markers",
+                    name="전체 평균",
+                    line=dict(dash="dash"),
+                    hovertemplate="%{x}: %{y:.1f}<extra></extra>"
+                ))
+                fig.update_traces(texttemplate="%{text:.1f}", textposition="outside")
+                chart = fig
+        elif x and x in df_filtered.columns:
+            cnt = df_filtered[x].astype(str).value_counts().reset_index()
+            cnt.columns = [x, "count"]
+            fig = px.bar(cnt, x=x, y="count", title=f"{x} 분포", text="count")
+            fig.update_traces(textposition="outside")
+            chart = fig
+
+    else:
+        st.warning("자동으로 적절한 시각화를 추론하지 못했습니다.")
+    
+    if chart is not None:
+        st.plotly_chart(chart, use_container_width=True)
+    else:
+        st.info("생성할 차트가 없습니다.")
+
+    explanation = generate_explanation_from_spec(df_filtered, spec, computed_metrics)
+    render_insight_card("자연어 기반 설명", explanation, key="nlq-insight")
+
 
 # ─────────────────────────────────────────────────────
 # 세그먼트 파생/매핑
@@ -1767,7 +2065,7 @@ st.set_page_config(
     layout="wide"
 )
 
-mode = st.sidebar.radio("분석 모드", ["기본 분석", "심화 분석", "전략 인사이트(기본)"])
+mode = st.sidebar.radio("분석 모드", ["기본 분석", "심화 분석", "전략 인사이트(기본)", "자연어 질의"])
 
 uploaded = st.file_uploader("📂 엑셀(.xlsx) 파일 업로드", type=["xlsx"])
 if not uploaded:
@@ -1955,3 +2253,9 @@ elif mode == "심화 분석":
 elif mode == "전략 인사이트(기본)":
     st.header("🧠 전략 인사이트 (기본)")
     show_basic_strategy_insights(df)
+elif mode == "자연어 질의":
+    st.header("🗣️ 자연어 질문 기반 자동 분석")
+    st.markdown("예시: '혼자 이용하는 사람들의 연령대 분포 보여주고 주로 가는 도서관별 중분류 만족도 강점/약점 비교해줘.'")
+    question = st.text_input("자연어 질문을 입력하세요", placeholder="예: 혼자 이용자들의 주 이용 도서관별 만족도 비교하고 강점 약점 알려줘")
+    if question:
+        handle_nl_question(df, question)
