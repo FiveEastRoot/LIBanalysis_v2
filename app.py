@@ -896,8 +896,6 @@ def handle_nl_question(df: pd.DataFrame, question: str):
         seen_codes = set()
         unique_codes = [c for c in questions_used_codes if not (c in seen_codes or seen_codes.add(c))]
         st.markdown("**참고한 문항 (문항번호만):** " + ", ".join(unique_codes))
-    if questions_used_full:
-        st.markdown("**참고한 전체 문항명:** " + ", ".join(questions_used_full))
 
     # 중분류 지표
     overall_mid_scores = compute_midcategory_scores(df_filtered)
