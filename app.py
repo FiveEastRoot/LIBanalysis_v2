@@ -739,8 +739,7 @@ def plot_categorical_stacked_bar(df, question):
 
     fig = go.Figure()
     colors = get_qualitative_colors(len(display_labels))
-    for i, label in enumerate(reversed(display_labels)):
-        raw_cat = categories_raw[display_labels[::-1].index(label)]
+    for i, (raw_cat, label) in enumerate(zip(categories_raw, display_labels)):
         fig.add_trace(go.Bar(
             x=[percent[raw_cat]],
             y=[question],
@@ -752,6 +751,7 @@ def plot_categorical_stacked_bar(df, question):
             insidetextanchor='middle',
             hoverinfo='x+name'
         ))
+
 
     fig.update_layout(
         barmode='stack',
