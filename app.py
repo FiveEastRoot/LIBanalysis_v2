@@ -938,6 +938,11 @@ def handle_nl_question(df: pd.DataFrame, question: str):
 
 
 
+    # 설명 생성
+    explanation = generate_explanation_from_spec(df_filtered, spec, computed_metrics, extra_group_stats=extra_group_stats)
+    render_insight_card("자연어 기반 설명", explanation, key="nlq-insight")
+
+
 
 # ─────────────────────────────────────────────────────
 # 세그먼트 파생/매핑
