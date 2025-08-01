@@ -789,7 +789,7 @@ def generate_explanation_from_spec(df_subset: pd.DataFrame, spec: dict, computed
 
     summary_context = "\n".join(parts)
     questions_full = computed_metrics.get("questions_used_full", [])
-    questions_str_full = ", ".join(questions_full)
+    questions_str_full = ", ".join(computed_metrics.get("questions_used_full", []))
 
     prompt = f"""
     너는 전략 리포트 작성자다. 아래 컨텍스트와 사용자 질의 포커스를 참고해 명확한 인사이트를 만들어줘.
