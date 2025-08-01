@@ -75,41 +75,61 @@ def extract_question_code(col_name: str) -> str:
         return col_name.split(' ', 1)[0].strip()
     return col_name.strip()
 
-def get_questions_used(spec: dict, df: pd.DataFrame, df_filtered: pd.DataFrame):
+def get_questions_used(spec: dict, df_full: pd.DataFrame, df_subset: pd.DataFrame):
     """
-    자연어 질의 스펙과 필터링된 데이터 기준으로 어떤 컬럼(문항)이 분석에 쓰였는지 반환.
-    반환: (전체 컬럼명 리스트, 문항코드 리스트)
+    자연어 질의 스펙을 보고 실제 참고된 문항 전체 이름들과 문항 코드(번호)만 추출한다.
+    반환: (full_names_set, codes_set)
     """
-    used_full = set()
+    used_full = []
+    used_codes = []
 
-    # 명시된 x, y, groupby
+    # x, y, groupby
     for key in ("x", "y", "groupby"):
         val = spec.get(key)
-        if val and val in df.columns:
-            used_full.add(val)
+        if not val:
+            continue
+        if isinstance(val, list):
+            for v in val:
+                if v in df_subset.columns:
+                    used_full.append(v)
+                else:
+                    # 중분류 이름일 수도 있음
+                    expanded = expand_midcategory_to_columns(v, df_subset)
+                    used_full.extend(expanded)
+        else:
+            if val in df_subset.columns:
+                used_full.append(val)
+            else:
+                expanded = expand_midcategory_to_columns(val, df_subset)
+                if expanded:
+                    used_full.extend(expanded)
+                else:
+                    used_full.append(val)  # fallback, 그대로
 
-    # 필터에 쓰인 컬럼
+    # filters: 컬럼명 포함
     for f in spec.get("filters", []):
         col = f.get("col")
-        if col and col in df.columns:
-            used_full.add(col)
+        if col:
+            if col in df_subset.columns:
+                used_full.append(col)
+            else:
+                used_full.append(col)
 
-    # 중분류 관련 문항(필터된 서브셋에 있는 것 기준으로)
-    for mid, predicate in MIDDLE_CATEGORY_MAPPING.items():
-        cols = [c for c in df.columns if predicate(c)]
-        # 이 중 df_filtered에 실제로 남아 있는 컬럼들을 포함
-        for c in cols:
-            if c in df_filtered.columns:
-                used_full.add(c)
+    # group-based midcategory comparisons may implicitly use all midcategories
+    focus = spec.get("focus", "").lower()
+    if any(k in focus for k in ["중분류", "강점", "약점", "전체 평균"]):
+        # 전체 중분류 점수 계산에 쓰이는 컬럼들
+        for mid, predicate in MIDDLE_CATEGORY_MAPPING.items():
+            cols = [c for c in df_subset.columns if predicate(c)]
+            used_full.extend(cols)
 
-    # groupby도 포함 (중복 방지)
-    gb = spec.get("groupby")
-    if gb and gb in df_filtered.columns:
-        used_full.add(gb)
+    # dedupe
+    used_full = list(dict.fromkeys([u for u in used_full if u]))  # preserve order
+    for col in used_full:
+        used_codes.append(extract_question_code(col))
 
-    used_full = sorted(used_full)
-    used_codes = sorted({extract_question_code(c) for c in used_full})
     return used_full, used_codes
+
 
 # ─────────────────────────────────────────────────────
 # 전처리/매핑 유틸
