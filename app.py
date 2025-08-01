@@ -699,7 +699,7 @@ def build_delta_prompt(delta_df: pd.DataFrame, midcats: list):
 4. 전체 길이는 1000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
 
 
-스타일: 간결한 비즈니스 요약, 소제목 포함, 숫자는 한 자리 소수, 조합명 명시 중심."""
+스타일: 비즈니스 리포트 톤, 소제목 포함, 숫자는 한 자리 소수, 조합명을 반복 명시하여 읽는 사람이 바로 어떤 그룹인지 알 수 있게 작성."""
     return prompt.strip()
 
 def build_ci_prompt(subset_df: pd.DataFrame, mc: str):
