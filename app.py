@@ -949,19 +949,6 @@ def handle_nl_question(df: pd.DataFrame, question: str):
     else:
         st.info("생성할 차트가 없습니다.")
 
-    # 설명 생성 (한 번만)
-    explanation = generate_explanation_from_spec(df_filtered, spec, computed_metrics, extra_group_stats=extra_group_stats)
-    render_insight_card("자연어 기반 설명", explanation, key="nlq-insight")
-
-    st.markdown("## 자연어 질의 결과")
-    st.markdown(f"**질의:** {question}")
-
-    spec = parse_nl_query_to_spec(question)
-    df_filtered = apply_filters(df, spec.get("filters", []))
-
-    if df_filtered.empty:
-        st.warning("필터 적용 결과 데이터가 없습니다. 조건을 조정해보세요.")
-        return
 
     # 참고한 문항 추출 (이후 설명/프롬프트 컨텍스트와 UI용)
     try:
