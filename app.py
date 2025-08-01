@@ -1770,7 +1770,9 @@ def page_segment_analysis(df):
     )
     st.plotly_chart(fig_radar, use_container_width=True)
 
-
+    # 룰 기반 요약
+    overall_profile_dict = {mc: overall_profile.get(mc, 0) for mc in midcats}
+    high_low_summary = interpret_midcategory_scores(df) if 'interpret_midcategory_scores' in globals() else ""
 
     # GPT 기반 해석 (레이더)
     combos = []
