@@ -385,6 +385,45 @@ def plot_midcategory_radar(df):
 # GPT 관련 헬퍼
 # ─────────────────────────────────────────────────────
 
+def ask_for_visualization_suggestion(explanation: str, spec: dict):
+    prompt = f"""
+너는 방금 생성된 자연어 기반 설명을 보고, 그 설명을 가장 잘 시각화해줄 시각화 스펙을 1~2개 추천하는 어시스턴트야.
+출력은 JSON 배열 하나만, 각 요소는 다음 구조를 가져야 해:
+
+{{
+  "chart": "radar" / "bar" / "heatmap" / "grouped_bar" / "delta_bar" / "none",
+  "x": "비교 축 (예: 중분류, SQ4 등) 또는 null",
+  "groupby": "세그먼트 기준(있다면) 또는 null",
+  "focus": "설명에 기반한 핵심 비교 포인트 (간단한 문장)",
+  "reason": "왜 이 시각화가 설명과 잘 맞는지 한 문장"
+}}
+
+자연어 설명:
+\"\"\"{explanation}\"\"\"
+
+원래 질의 스펙:
+{json.dumps(spec, ensure_ascii=False)}
+
+조건:
+- 설명에 나온 주요 비교 대상(예: '전체 평균 대비', '세그먼트별 중분류 차이', '특정 이용목적 그룹')이 반영되도록.
+"""
+    resp = safe_chat_completion(
+        model="gpt-4.1-nano",
+        messages=[
+            {"role": "system", "content": "너는 시각화 추천 전문가야."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.2,
+        max_tokens=400
+    )
+    content = resp.choices[0].message.content.strip()
+    try:
+        suggestions = json.loads(content)
+        if isinstance(suggestions, dict):
+            suggestions = [suggestions]
+    except Exception:
+        suggestions = []
+    return suggestions
 
 
     # 명시된 x, y, groupby
@@ -876,92 +915,69 @@ def apply_filters(df: pd.DataFrame, filters: list):
     return dff
 
 def handle_nl_question(df: pd.DataFrame, question: str):
-    st.markdown("## 자연어 질의 결과")
-    st.markdown(f"**질의:** {question}")
+    st.subheader("💬 자연어 기반 분석")
 
-    spec = parse_nl_query_to_spec(question)
-    df_filtered = apply_filters(df, spec.get("filters", []))
-
-    if df_filtered.empty:
-        st.warning("필터 적용 결과 데이터가 없습니다. 조건을 조정해보세요.")
-        return
-
-    # 참고한 문항 추출
     try:
+        spec = parse_natural_language_query(question, df)
+        if spec is None:
+            st.warning("자연어 질의를 이해할 수 없습니다.")
+            return
+
+        # 1. 필터 적용
+        df_filtered = apply_filters(df, spec.get("filters", []))
+
+        # 2. 질문 코드 추출
         questions_used_full, questions_used_codes = get_questions_used(spec, df, df_filtered)
-    except NameError:
-        questions_used_full, questions_used_codes = [], []
 
-    if questions_used_codes:
-        seen_codes = set()
-        unique_codes = [c for c in questions_used_codes if not (c in seen_codes or seen_codes.add(c))]
-        st.markdown("**참고한 문항 (문항번호만):** " + ", ".join(unique_codes))
-    if questions_used_full:
-        st.markdown("**참고한 전체 문항명:** " + ", ".join(questions_used_full))
+        # 3. 설명 생성
+        explanation = generate_explanation_from_spec(df_filtered, spec)
+        render_insight_card("📘 자연어 기반 해석", explanation, key="explanation")
 
-    # 중분류 지표
-    overall_mid_scores = compute_midcategory_scores(df_filtered)
-    overall_mid_dict = {k: float(v) for k, v in overall_mid_scores.items()} if not overall_mid_scores.empty else {}
-    global_mid_scores = compute_midcategory_scores(df)
-    deltas = {k: overall_mid_dict.get(k, 0) - float(global_mid_scores.get(k, overall_mid_dict.get(k, 0))) for k in overall_mid_dict}
+        # 4. 시각화 추천 받기
+        suggestions = ask_for_visualization_suggestion(explanation, spec)
 
-    # 상위 세그먼트
-    top_segments = []
-    gb = spec.get("groupby")
-    if gb and gb in df_filtered.columns:
-        counts = df_filtered[gb].astype(str).value_counts().nlargest(3)
-        for label, n in counts.items():
-            subset = df_filtered[df_filtered[gb].astype(str) == label]
-            profile = compute_midcategory_scores(subset)
-            top_segments.append({
-                "label": f"{gb}={label}",
-                "n": int(n),
-                "profile": {k: float(v) for k, v in profile.items()}
-            })
-    else:
-        top_segments.append({
-            "label": "필터된 전체",
-            "n": len(df_filtered),
-            "profile": overall_mid_dict
-        })
+        # 5. 추천 기반 시각화 출력
+        for i, s in enumerate(suggestions):
+            chart_type = s.get("chart")
+            groupby = s.get("groupby")
+            x = s.get("x")
+            reason = s.get("reason")
+            focus = s.get("focus")
 
-    computed_metrics = {
-        "overall_mid_scores": overall_mid_dict,
-        "deltas": deltas,
-        "top_segments": top_segments,
-        "questions_used_full": questions_used_full,
-        "questions_used_codes": questions_used_codes
-    }
+            st.markdown(f"### 📊 추천 시각화 {i+1}: {chart_type.upper()}  \n- 🔍 **초점**: {focus}  \n- 🤔 **이유**: {reason}")
 
-    # 그룹 비교 통계
-    extra_group_stats = None
-    if gb and gb in df_filtered.columns:
-        extra_group_stats = compare_midcategory_by_group(df_filtered, gb)
+            if chart_type == "radar":
+                fig = plot_midcategory_radar(df_filtered)
+                st.plotly_chart(fig, use_container_width=True)
+            elif chart_type in ["grouped_bar", "bar"] and x and groupby:
+                fig, _ = plot_grouped_bar(df_filtered, x, groupby)
+                st.plotly_chart(fig, use_container_width=True)
+            elif chart_type == "heatmap":
+                fig, _ = plot_heatmap_segment(df_filtered)
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("해당 추천 시각화는 지원되지 않거나 생성할 수 없습니다.")
 
-    # 차트 유형 결정 및 시각화 (기존 로직 그대로)
-    chart_type = infer_chart_type(spec, df_filtered)
-    chart = None
+        # 6. fallback (추천 없을 시 기존 방식 사용)
+        if not suggestions:
+            st.markdown("🔁 추천 시각화가 없어 기본 시각화로 대체합니다.")
+            render_default_visualization(spec, df_filtered)
+
+    except Exception as e:
+        st.error(f"시각화 분석 처리 중 오류 발생: {e}")
+
+def render_default_visualization(spec, df_filtered):
+    chart_type = infer_chart_type(spec)
     if chart_type == "radar":
-        # ... (기존 radar 생성 코드)
-        pass  # 실제 코드로 대체
+        fig = plot_midcategory_radar(df_filtered)
+    elif chart_type == "grouped_bar":
+        fig, _ = plot_grouped_bar(df_filtered, spec.get("x"), spec.get("groupby"))
     elif chart_type == "heatmap":
-        # ... (기존 heatmap 생성 코드)
-        pass
-    elif chart_type in ("grouped_bar", "bar"):
-        # ... (기존 grouped_bar / bar 생성 코드)
-        pass
+        fig, _ = plot_heatmap_segment(df_filtered)
     else:
-        st.warning("자동으로 적절한 시각화를 추론하지 못했습니다.")
-
-    if chart is not None:
-        st.plotly_chart(chart, use_container_width=True)
-    else:
-        st.info("생성할 차트가 없습니다.")
-
-    # 설명 생성
-    explanation = generate_explanation_from_spec(df_filtered, spec, computed_metrics, extra_group_stats=extra_group_stats)
-    render_insight_card("자연어 기반 설명", explanation, key="nlq-insight")
-
+        st.warning("지원되지 않는 기본 시각화입니다.")
+        return
+    st.plotly_chart(fig, use_container_width=True)
 
 
 # ─────────────────────────────────────────────────────
