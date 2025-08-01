@@ -342,7 +342,7 @@ def extract_keyword_and_audience(responses, batch_size=20):
 """
         try:
             resp = safe_chat_completion(
-                model="gpt-4.1-mini",
+                model="gpt-4.1-nano",
                 messages=[{"role": "system", "content": prompt}],
                 temperature=0.2,
                 max_tokens=300
