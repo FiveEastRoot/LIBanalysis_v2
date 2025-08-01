@@ -837,15 +837,12 @@ def generate_explanation_from_spec(df_subset: pd.DataFrame, spec: dict, computed
         parts.append("그룹 비교: " + " / ".join(summary_lines[:3]))  # 길이 제한 감안
 
     summary_context = "\n".join(parts)
-    questions_full = computed_metrics.get("questions_used_full", [])
-    questions_str_full = ", ".join(computed_metrics.get("questions_used_full", []))
 
     prompt = f"""
-    너는 전략 리포트 작성자다. 아래 컨텍스트와 사용자 질의 포커스를 참고해 명확한 인사이트를 만들어줘.
+    너는 전략 보고서 작성자다. 아래 컨텍스트와 사용자 질의 포커스를 참고해 명확한 인사이트를 만들어줘.
 
     사용자 질의 포커스: {spec.get('focus', '')}
-
-    사용된 문항(전체 이름): {questions_str_full}
+    참고한 문항 코드: {', '.join(computed_metrics.get('questions_used_codes', []))}
 
     데이터 요약:
     {summary_context}
@@ -946,6 +943,13 @@ def handle_nl_question(df: pd.DataFrame, question: str):
         "questions_used_full": questions_used_full,
         "questions_used_codes": questions_used_codes
     }
+    questions_used_full, questions_used_codes = get_questions_used(spec, df, df_filtered)
+    computed_metrics["questions_used_full"] = questions_used_full
+    computed_metrics["questions_used_codes"] = questions_used_codes
+
+    if questions_used_codes:
+        st.markdown("**참고한 문항 (문항번호만):** " + ", ".join(questions_used_codes))
+
 
     # 차트 유형 결정 및 시각화
     chart_type = infer_chart_type(spec, df_filtered)
