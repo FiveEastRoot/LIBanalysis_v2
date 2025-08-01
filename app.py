@@ -1186,7 +1186,7 @@ def page_segment_analysis(df):
         theta=cats_closed,
         fill=None,
         name="전체 평균",
-        line=dict(dash="dash", width=4, color = "black"),
+        line=dict(dash="dash", width=5, color = "black"),
         opacity=0.5
 
     ))
