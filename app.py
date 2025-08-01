@@ -1,6 +1,7 @@
 import time
 import numpy as np
 import streamlit as st
+import scipy.stats as stats
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
@@ -291,6 +292,75 @@ def plot_midcategory_radar(df):
 # ─────────────────────────────────────────────────────
 # GPT 관련 헬퍼
 # ─────────────────────────────────────────────────────
+
+def cohen_d(x, y):
+    x = np.array(x.dropna(), dtype=float)
+    y = np.array(y.dropna(), dtype=float)
+    nx, ny = len(x), len(y)
+    if nx < 2 or ny < 2:
+        return None
+    # pooled standard deviation
+    pooled = np.sqrt(((nx - 1) * x.var(ddof=1) + (ny - 1) * y.var(ddof=1)) / (nx + ny - 2)) if (nx + ny - 2) > 0 else 0
+    if pooled == 0:
+        return 0.0
+    return (x.mean() - y.mean()) / pooled
+
+def compare_midcategory_by_group(df, group_col):
+    """
+    group_col 기준으로 각 그룹의 중분류 만족도를 전체 나머지와 비교하여
+    mean, delta, Welch t-test p-value, Cohen's d, sample size를 계산.
+    반환 형태: {group_label: {midcategory: {mean, delta_vs_overall, p_value_vs_rest, cohen_d_vs_rest, n}}}
+    """
+    results = {}
+    global_mid = compute_midcategory_scores(df)
+    
+    # per-row midcategory scores (각 응답자별로 중분류 점수 계산)
+    def per_row_mid_scores(subdf):
+        per_mid = {}
+        for mid, predicate in MIDDLE_CATEGORY_MAPPING.items():
+            cols = [c for c in subdf.columns if predicate(c)]
+            if not cols:
+                continue
+            scaled = subdf[cols].apply(scale_likert)
+            per_mid[mid] = scaled.mean(axis=1, skipna=True)
+        return per_mid  # dict of Series
+
+    # 전체 데이터 기준 per-row
+    overall_per_row = per_row_mid_scores(df)
+
+    for group_value, sub in df.groupby(df[group_col].astype(str)):
+        group_per_row = per_row_mid_scores(sub)
+        group_summary = {}
+        for mid in global_mid.index:
+            if mid not in group_per_row or mid not in overall_per_row:
+                continue
+            grp_scores = group_per_row[mid].dropna()
+            rest_mask = df[group_col].astype(str) != str(group_value)
+            rest = df[rest_mask]
+            rest_per_row = per_row_mid_scores(rest).get(mid, pd.Series(dtype=float)).dropna()
+            if grp_scores.empty or rest_per_row.empty:
+                continue
+            # Welch's t-test
+            try:
+                stat, p = stats.ttest_ind(grp_scores, rest_per_row, equal_var=False)
+            except Exception:
+                p = None
+            d = cohen_d(grp_scores, rest_per_row)
+            mean_group = compute_midcategory_scores(sub).get(mid, None)
+            delta = None
+            if mean_group is not None and mid in global_mid:
+                delta = mean_group - global_mid.get(mid)
+            group_summary[mid] = {
+                "mean": round(float(mean_group), 1) if mean_group is not None else None,
+                "delta_vs_overall": round(float(delta), 1) if delta is not None else None,
+                "p_value_vs_rest": round(p, 4) if p is not None else None,
+                "cohen_d_vs_rest": round(d, 2) if d is not None else None,
+                "n": int(len(grp_scores))
+            }
+        results[str(group_value)] = group_summary
+    return results
+
+
 @st.cache_data(show_spinner=False)
 def process_answers(responses):
     expanded = []
@@ -342,7 +412,7 @@ def extract_keyword_and_audience(responses, batch_size=20):
 """
         try:
             resp = safe_chat_completion(
-                model="gpt-4.1",
+                model="gpt-4.1-nano",
                 messages=[{"role": "system", "content": prompt}],
                 temperature=0.2,
                 max_tokens=300
@@ -529,28 +599,36 @@ def build_small_multiple_prompt(top_df: pd.DataFrame, midcat: str, segment_cols_
 def parse_nl_query_to_spec(question: str):
     system_prompt = """
 너는 설문 데이터에 대한 자연어 질의를 받아서 시각화/분석 스펙을 구조화된 JSON으로 바꾸는 파서야.
-출력은 오직 JSON 객체 하나만, 코드블럭 없이 반환해. 아래 필드들을 채워줘. 모르겠으면 null 또는 빈리스트로.
+출력은 오직 JSON 객체 하나만, 코드블럭 없이 반환해. 모르면 null이나 빈 리스트로 만들어줘.
 
-필드 예시:
+필드:
 {
-  "chart": "bar" / "line" / "heatmap" / "radar" / null,
+  "chart": "bar" / "line" / "heatmap" / "radar" / "delta_bar" / null,
   "x": "컬럼명 또는 중분류 이름",
   "y": null,
   "groupby": "컬럼명 (비교 기준)",
-  "filters": [ {"col": "이용형태", "op": "contains", "value": "혼자"}, ... ],
-  "focus": "설명에서 중점적으로 다룰 포인트 (예: 전체 평균 대비 강점/약점, 연령대 분포 등)"
+  "filters": [ {"col": "컬럼명", "op": "contains"|"=="|"in", "value": "값 또는 리스트"} ],
+  "focus": "설명에서 중점적으로 다룰 포인트"
 }
 
-예시 질의와 기대 스펙:
-1. "혼자 이용하는 사람들의 연령대 분포 보여주고, 주로 가는 도서관별 중분류 만족도 비교해줘."
-   -> filters에 '혼자' 관련, x에 연령대(SQ2_GROUP), groupby에 주 이용 도서관, chart는 비교면 grouped_bar, focus에 "혼자 이용자 연령대 및 도서관별 중분류 만족도 강약점".
+예시:
+1. "혼자 이용하는 사람들의 연령대 분포 보여주고, 주로 가는 도서관별 중분류 만족도 강점/약점 비교해줘."
+   -> {
+        "chart": null,
+        "x": "SQ2_GROUP",
+        "groupby": "SQ4", 
+        "filters": [{"col": "이용형태", "op": "contains", "value": "혼자"}],
+        "focus": "혼자 이용자 연령대 분포 및 주 이용 도서관별 중분류 만족도 강약점 비교"
+      }
 2. "전체 평균 대비 어떤 중분류가 강점인지 레이더로 보여줘."
-   -> chart: "radar", focus: "전체 평균 대비 중분류 강점/약점 비교".
+   -> {"chart": "radar", "focus": "전체 평균 대비 중분류 강점/약점 비교"}
 3. "주이용서비스별 정보 획득과 소통 만족도 비교해줘."
-   -> groupby: 주이용서비스 컬럼, x: 중분류 이름, focus: "서비스별 정보 획득 vs 소통 비교".
+   -> {"chart": "grouped_bar", "groupby": "SQ5", "x": "중분류", "focus": "정보 획득 vs 소통 비교"}
+
+반드시 자연어에서 유추할 수 있는 필드들을 채우고, focus는 사용자 의도를 압축해서 짧게 작성해.
 """
     resp = safe_chat_completion(
-        model="gpt-4.1-nano",
+        model="gpt-4.1",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": question}
@@ -563,7 +641,6 @@ def parse_nl_query_to_spec(question: str):
     try:
         spec = json.loads(content)
     except Exception:
-        # fallback 기본 스펙
         spec = {
             "chart": None,
             "x": None,
@@ -608,7 +685,7 @@ def infer_chart_type(spec: dict, df_subset: pd.DataFrame):
     # default fallback
     return "bar"
 
-def generate_explanation_from_spec(df_subset: pd.DataFrame, spec: dict, computed_metrics: dict):
+def generate_explanation_from_spec(df_subset: pd.DataFrame, spec: dict, computed_metrics: dict, extra_group_stats=None):
     focus = spec.get("focus", "기본 요약")
     parts = []
     if "overall_mid_scores" in computed_metrics:
@@ -621,6 +698,17 @@ def generate_explanation_from_spec(df_subset: pd.DataFrame, spec: dict, computed
     if "top_segments" in computed_metrics:
         top = computed_metrics["top_segments"]
         parts.append("주요 세그먼트/조합: " + "; ".join(f"{t['label']} (n={t['n']})" for t in top))
+    if extra_group_stats:
+        summary_lines = []
+        for group_label, mids in extra_group_stats.items():
+            for mid, stats in mids.items():
+                line = f"{group_label}의 '{mid}' 평균 {stats.get('mean')}, 전체 대비 {stats.get('delta_vs_overall'):+.1f}"
+                if stats.get("p_value_vs_rest") is not None:
+                    line += f", p={stats['p_value_vs_rest']}"
+                if stats.get("cohen_d_vs_rest") is not None:
+                    line += f", d={stats['cohen_d_vs_rest']}"
+                summary_lines.append(line)
+        parts.append("그룹 비교: " + " / ".join(summary_lines[:3]))  # 길이 제한 감안
 
     summary_context = "\n".join(parts)
     prompt = f"""
@@ -633,14 +721,15 @@ def generate_explanation_from_spec(df_subset: pd.DataFrame, spec: dict, computed
 
 요청:
 1. 주요 관찰 패턴 2~3개를 기술해줘.
-2. 강점과 약점을 구체적으로 조합명이나 항목명을 쓰면서 숫자와 함께 설명해줘.
+2. 강점과 약점을 구체적인 항목명이나 세그먼트명을 숫자와 함께 설명해줘.
 3. 우선 개입/확장할만한 행동 제안 2개를 제시해줘.
-4. 전체 길이 500~1000자, 비즈니스 톤, 숫자는 한 자리 소수, '~' 대신 '-' 사용.
+4. 전체 길이 500~1000자, 비즈니스 톤, 숫자는 한 자리 소수, '-' 사용.
 
 출력만 텍스트로 해줘.
 """
     explanation = call_gpt_for_insight(prompt)
     return explanation.replace("~", "-")
+
 
 def apply_filters(df: pd.DataFrame, filters: list):
     dff = df.copy()
@@ -697,6 +786,17 @@ def handle_nl_question(df: pd.DataFrame, question: str):
         "deltas": deltas,
         "top_segments": top_segments
     }
+
+    # 그룹 비교 통계 (groupby가 있으면)
+    extra_group_stats = None
+    gb = spec.get("groupby")
+    if gb and gb in df_filtered.columns:
+        extra_group_stats = compare_midcategory_by_group(df_filtered, gb)
+
+    # 설명 생성 (기존 호출을 아래로 교체)
+    explanation = generate_explanation_from_spec(df_filtered, spec, computed_metrics, extra_group_stats=extra_group_stats)
+    render_insight_card("자연어 기반 설명", explanation, key="nlq-insight")
+
 
     # 차트 유형 결정
     chart_type = infer_chart_type(spec, df_filtered)
