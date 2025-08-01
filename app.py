@@ -112,18 +112,14 @@ def map_keyword_to_category(keyword):
             return cat
     return "해당없음"
 
-def escape_tildes(text: str, mode: str = "html") -> str:
-    """
-    mode="html": 카드처럼 HTML로 렌더링할 때 물결표 처리.
-    mode="markdown": st.markdown 같은 마크다운 컨텍스트에서 취소선 방지.
-    """
-    if mode == "html":
-        # '~~' 먼저 바꾸고 단일 ~도 엔티티로
-        text = text.replace("~~", "&#126;&#126;")
-        return text.replace("~", "&#126;")
-    else:  # markdown
-        text = text.replace("~~", r"\~\~")
-        return text.replace("~", r"\~")
+def escape_for_html(text: str) -> str:
+    # HTML 안에서 '~' / '~~'가 원치 않는 효과를 안 내게 엔티티로 치환
+    text = text.replace("~~", "&#126;&#126;")
+    return text.replace("~", "&#126;")
+
+def escape_for_markdown(text: str) -> str:
+    # Markdown에서 '~~'가 strikethrough로 해석되는 것을 막기 위해 이스케이프
+    return text.replace("~~", r"\~\~")
 
 # ─────────────────────────────────────────────────────
 # DataFrame & visualization helpers
