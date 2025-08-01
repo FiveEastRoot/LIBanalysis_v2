@@ -384,39 +384,75 @@ def plot_midcategory_radar(df):
 # ─────────────────────────────────────────────────────
 # GPT 관련 헬퍼
 # ─────────────────────────────────────────────────────
+def extract_used_questions_from_spec(spec: dict, df_full: pd.DataFrame, df_filtered: pd.DataFrame):
+    """
+    spec 기반으로 실제 사용된 문항 전체 이름과 문항 코드(번호)를 추출.
+    반환: (used_full_list, used_codes_list) — 순서 보존, 중복 제거
+    """
+    used_full = []
 
-
-
-    # 명시된 x, y, groupby
-    for key in ("x", "y", "groupby"):
+    # 1. 명시된 x, y, groupby (groupby는 str 또는 list 허용)
+    for key in ("x", "y"):
         val = spec.get(key)
-        if val and val in df.columns:
-            used.add(val)
+        if val and val in df_full.columns:
+            used_full.append(val)
 
-    # 필터에 쓰인 컬럼
+    gb = spec.get("groupby")
+    if gb:
+        if isinstance(gb, list):
+            for g in gb:
+                if g in df_full.columns:
+                    used_full.append(g)
+        else:
+            if gb in df_full.columns:
+                used_full.append(gb)
+
+    # 2. filters에 쓰인 컬럼
     for f in spec.get("filters", []):
         col = f.get("col")
-        if col and col in df.columns:
-            used.add(col)
+        if col and col in df_full.columns:
+            used_full.append(col)
 
-    # 중분류 관련: focus나 차트 타입에 따라 포함된 중분류 계산에 쓰인 원본 문항들
-    # 예: radar, delta, heatmap 등에서 compute_midcategory_scores가 참조한 문항
-    # MIDDLE_CATEGORY_MAPPING은 predicate 함수이므로 해당 predicate로 필터
-    for mid, predicate in MIDDLE_CATEGORY_MAPPING.items():
-        # 이 중분류가 현재 필터된 데이터에 대해서 계산되었는지 확인
-        cols = [c for c in df.columns if predicate(c)]
-        if not cols:
-            continue
-        # 만약 필터된 대상의 중분류 점수가 생성되었다면 (즉, df_filtered에도 해당 컬럼이 존재)
-        if any(c in df_filtered.columns for c in cols):
-            used.update([c for c in cols if c in df_filtered.columns])
+    # 3. focus/차트 유형 등에 따라 중분류 기반 문항 포함
+    focus = (spec.get("focus") or "").lower()
+    chart_type = (spec.get("chart") or "").lower() if spec.get("chart") else ""
+    need_midcat = any(k in focus for k in ["중분류", "강점", "약점", "전체 평균", "프로파일", "비교"]) or chart_type in {"radar", "delta_bar", "heatmap", "grouped_bar"}
+    if need_midcat:
+        # 실제 필터된 데이터에 해당 컬럼이 있는지 확인하며 포함
+        for mid, predicate in MIDDLE_CATEGORY_MAPPING.items():
+            cols = [c for c in df_filtered.columns if predicate(c)]
+            if cols:
+                used_full.extend(cols)
 
-    # 기타: groupby가 세그먼트 조합일 경우, 조합에 쓰인 파생 컬럼도 포함
-    gb = spec.get("groupby")
-    if gb and gb in df_filtered.columns:
-        used.add(gb)
+    # 4. groupby가 세그먼트 조합일 경우 (예: 여러 파생 컬럼이 결합된 경우), df_filtered에 있는 그 자체도 포함
+    if gb:
+        if isinstance(gb, list):
+            for g in gb:
+                if g in df_filtered.columns:
+                    used_full.append(g)
+        else:
+            if gb in df_filtered.columns:
+                used_full.append(gb)
 
-    return sorted(used)
+    # 순서 유지하며 중복 제거
+    seen = set()
+    used_full_unique = []
+    for c in used_full:
+        if c and c not in seen:
+            seen.add(c)
+            used_full_unique.append(c)
+
+    # 코드만 뽑고 중복 제거
+    used_codes = []
+    seen_codes = set()
+    for col in used_full_unique:
+        code = extract_question_code(col)
+        if code not in seen_codes:
+            seen_codes.add(code)
+            used_codes.append(code)
+
+    return used_full_unique, used_codes
+
 
 def cohen_d(x, y):
     x = np.array(x.dropna(), dtype=float)
@@ -572,7 +608,7 @@ def extract_keyword_and_audience(responses, batch_size=20):
             results.append((row['response'], row['keywords'], row['audience']))
     return results
 
-def call_gpt_for_insight(prompt, model="gpt-4.1-nano", temperature=0.2, max_tokens=1000):
+def call_gpt_for_insight(prompt, model="gpt-4.1-nano", temperature=0.2, max_tokens=500):
     try:
         resp = client.chat.completions.create(
             model=model,
@@ -610,7 +646,7 @@ def build_radar_prompt(overall_profile: dict, combos: list):
 2. 서로 뚜렷히 대비되는 두 개의 조합명 쌍을 골라 비교 설명해줘. 각각 어떤 중분류에서 차이가 나는지, 그로부터 어떤 인사이트가 나오는지 구체적으로 서술.
 3. 전체적으로 관찰되는 패턴 3개를 도출해줘. (예: “특정 연령대 조합들이 정보 획득은 높지만 소통에서 일관되게 낮음”처럼 조합 특성 포함)
 4. 전략적 시사점 3개: 어떤 조합을 우선 공략/보완할지, 조합명을 명시하며 구체적 행동 방향을 제안해줘.
-5. 전체 길이는 2000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
+5. 전체 길이는 1000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
 
 스타일: 비즈니스 보고서 톤, 소제목 포함, 숫자는 한 자리 소수, 조합명(예: '여성 | 30-34세')을 모든 설명에 명시하고 ‘조합 1’ 같은 일반명은 쓰지 마."""
     return prompt.strip()
@@ -636,7 +672,7 @@ def build_heatmap_prompt(table_df: pd.DataFrame, midcats: list):
 2. 응답자 수가 충분한 조합명들에서 일관된 강점과 약점을 각각 요약해줘. 예: '여성 | 30-34세'는 정보 획득과 공익성에서 일관되게 높고, 소통 및 정책 활용이 낮음.
 3. 전체적인 중분류별 경향: 어떤 중분류가 전반적으로 높은지/낮은지, 그리고 특정 조합명들이 그 흐름과 어떻게 다른지 설명해줘.
 4. 요약 개요 (한 문단)과, 도출할 수 있는 3개의 구체적인 행동 권장점(조합명을 포함한 우선순위 포함)을 제시해줘.
-5. 전체 길이는 2000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
+5. 전체 길이는 1000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
 
 
 스타일: 비즈니스 리포트 톤, 소제목 포함, 숫자는 한 자리 소수, 조합명을 반복적으로 사용하여 비교·대조 중심으로 작성."""
@@ -660,7 +696,7 @@ def build_delta_prompt(delta_df: pd.DataFrame, midcats: list):
 1. 각 조합명별로 전체 평균 대비 가장 과도하게 높은/낮은 중분류를 명확히 짚어줘. 예: '여성 | 30-34세는 정보 획득에서 +12.3으로 강점이나, 소통 및 정책 활용에서는 -9.5로 약점'처럼.
 2. 여러 조합명이 반복해서 비슷한 편차 패턴(예: 동일하게 특정 중분류가 낮거나 높은)을 보이는지 그룹화하여 설명해줘. 구체적인 조합명들을 묶어 비교.
 3. 개선/확장 우선순위를 조합명 기준으로 추천해줘. (예: '소통 및 정책 활용이 반복적으로 낮은 조합명들부터 개선해야 하며, 중분류 평균 대비 높고 빈번한 조합명들에 대해 확장 전략 고려' 등)
-4. 전체 길이는 2000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
+4. 전체 길이는 1000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
 
 
 스타일: 간결한 비즈니스 요약, 소제목 포함, 숫자는 한 자리 소수, 조합명 명시 중심."""
@@ -685,7 +721,7 @@ def build_ci_prompt(subset_df: pd.DataFrame, mc: str):
 1. 어떤 조합명들의 편차가 0 기준선과 비교해 실질적으로 의미 있어 보이는지 설명해줘. (예: 표준오차에 비해 편차가 충분히 큰지 여부를 조합명별로 판단)
 2. 편차가 크지만 불확실성이 큰 조합명과, 편차는 작지만 안정적인 조합명을 조합명 기준으로 구분하여 비교 설명해줘.
 3. 우선 개입하거나 주목해야 할 조합명 3개를 추천해줘. 각각 왜 우선순위인지(편차/불확실성 관점) 구체적으로 써줘.
-4. 전체 길이는 2000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
+4. 전체 길이는 1000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
 
 
 스타일: 비즈니스 리포트 톤, 소제목 포함, 숫자는 한 자리 소수, 조합명을 반복 명시하여 읽는 사람이 바로 어떤 그룹인지 알 수 있게 작성."""
@@ -712,7 +748,7 @@ def build_small_multiple_prompt(top_df: pd.DataFrame, midcat: str, segment_cols_
 1. 중분류 '{midcat}'에서 조합명들 간 점수 분포와 순위 변동성이 어떤지 요약해줘. (예: 어떤 조합명이 일관되게 상위인지, 어떤 조합명은 변동성이 크며 불안정한지)
 2. 특징적인 outlier 조합명들을 지적하고, 그들이 왜 예외적인지 설명해줘. (예: 다른 조합명들보다 훨씬 높거나 낮은 경우)
 3. 일관성 있는 강점/약점을 보이는 조합명 그룹이 있다면 묶어서 설명해줘. (예: '30~34세 여성' 계열이 정보 획득은 높지만 소통이 낮은 패턴)
-4. 전체 길이는 2000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
+4. 전체 길이는 1000자로 제한돼. 그리고 작성간에 "~"는 모두 "-" 로 표시되어야해. 
 
 
 스타일: 짧고 명확한 비즈니스 요약, 소제목 포함, 숫자는 한 자리 소수, 조합명을 반복하여 비교 중심으로 작성."""
