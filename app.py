@@ -65,6 +65,49 @@ def interpret_midcategory_scores(df):
         parts.append("모든 중분류가 전체 평균 수준과 비슷합니다.")
     return " ".join(parts)
 
+def extract_question_code(col_name: str) -> str:
+    """
+    예: 'Q1-1. 공간 만족도' -> 'Q1-1', 'SQ2 GROUP' -> 'SQ2', 'DQ4 1순위' -> 'DQ4'
+    """
+    if '.' in col_name:
+        return col_name.split('.', 1)[0].strip()
+    if ' ' in col_name:
+        return col_name.split(' ', 1)[0].strip()
+    return col_name.strip()
+
+def get_questions_used(spec: dict, df: pd.DataFrame, df_filtered: pd.DataFrame):
+    used_full = set()
+    # 명시된 x, y, groupby
+    for key in ("x", "y", "groupby"):
+        val = spec.get(key)
+        if val and val in df.columns:
+            used_full.add(val)
+
+    # 필터에 쓰인 컬럼
+    for f in spec.get("filters", []):
+        col = f.get("col")
+        if col and col in df.columns:
+            used_full.add(col)
+
+    # 중분류 관련 문항 (compute_midcategory_scores가 참조하는 컬럼)
+    for mid, predicate in MIDDLE_CATEGORY_MAPPING.items():
+        cols = [c for c in df.columns if predicate(c)]
+        if not cols:
+            continue
+        # 필터된 대상에도 존재하면 포함
+        if any(c in df_filtered.columns for c in cols):
+            used_full.update([c for c in cols if c in df_filtered.columns])
+
+    # groupby가 있으면 포함
+    gb = spec.get("groupby")
+    if gb and gb in df_filtered.columns:
+        used_full.add(gb)
+
+    used_full = sorted(used_full)
+    used_codes = sorted({extract_question_code(c) for c in used_full})
+    return used_full, used_codes
+
+
 # ─────────────────────────────────────────────────────
 # 전처리/매핑 유틸
 # ─────────────────────────────────────────────────────
@@ -745,14 +788,15 @@ def generate_explanation_from_spec(df_subset: pd.DataFrame, spec: dict, computed
         parts.append("그룹 비교: " + " / ".join(summary_lines[:3]))  # 길이 제한 감안
 
     summary_context = "\n".join(parts)
-    questions_list = computed_metrics.get("questions_used", [])
-    questions_str = ", ".join(questions_list)
+    questions_full = computed_metrics.get("questions_used_full", [])
+    questions_str_full = ", ".join(questions_full)
+
     prompt = f"""
     너는 전략 리포트 작성자다. 아래 컨텍스트와 사용자 질의 포커스를 참고해 명확한 인사이트를 만들어줘.
 
     사용자 질의 포커스: {spec.get('focus', '')}
 
-    사용된 문항(컬럼): {questions_str}
+    사용된 문항(전체 이름): {questions_str_full}
 
     데이터 요약:
     {summary_context}
@@ -765,6 +809,7 @@ def generate_explanation_from_spec(df_subset: pd.DataFrame, spec: dict, computed
 
     출력만 텍스트로 해줘.
     """
+
     explanation = call_gpt_for_insight(prompt)
     return explanation.replace("~", "-")
 
@@ -824,8 +869,9 @@ def handle_nl_question(df: pd.DataFrame, question: str):
         "deltas": deltas,
         "top_segments": top_segments
     }
-    questions_used = get_questions_used(spec, df, df_filtered)
-    computed_metrics["questions_used"] = questions_used
+    questions_used_full, questions_used_codes = get_questions_used(spec, df, df_filtered)
+    computed_metrics["questions_used_full"] = questions_used_full
+    computed_metrics["questions_used_codes"] = questions_used_codes
     # 그룹 비교 통계 (groupby가 있으면)
     extra_group_stats = None
     gb = spec.get("groupby")
@@ -834,8 +880,9 @@ def handle_nl_question(df: pd.DataFrame, question: str):
 
     # 설명 생성 (기존 호출을 아래로 교체)
     explanation = generate_explanation_from_spec(df_filtered, spec, computed_metrics, extra_group_stats=extra_group_stats)
-    if questions_used:
-        st.markdown("**참고한 문항(컬럼):** " + ", ".join(questions_used))
+    if questions_used_codes:
+        st.markdown("**참고한 문항 (문항번호만):** " + ", ".join(questions_used_codes))
+
 
     render_insight_card("자연어 기반 설명", explanation, key="nlq-insight")
 
