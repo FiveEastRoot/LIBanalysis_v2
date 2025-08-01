@@ -1363,7 +1363,7 @@ def page_segment_analysis(df):
     # 전체 평균 프로파일
     overall_profile_dict = {mc: overall_profile.get(mc, 0) for mc in midcats}
     high_low_summary = interpret_midcategory_scores(df) if 'interpret_midcategory_scores' in globals() else ""
-    st.write(high_low_summary)
+    content_html = escape_for_html(high_low_summary).replace("\n", "<br>")
 
     # GPT 기반 해석
     st.markdown("#### GPT 생성형 해석")
@@ -1492,7 +1492,7 @@ def page_segment_analysis(df):
             ci_upper = delta + se
             signif = "유의미" if not (ci_lower <= 0 <= ci_upper) else "불확실"
             ci_summary.append(f"{combo}: 편차 {delta:.1f}, SE {se:.2f} ({signif})")
-        st.write("；".join(ci_summary))
+        content_html = escape_for_html(ci_summary).replace("\n", "<br>")
 
         st.markdown("#### GPT 생성형 해석 (신뢰구간)")
         prompt_ci = build_ci_prompt(subset_local, mc)
