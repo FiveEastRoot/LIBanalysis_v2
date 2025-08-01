@@ -936,29 +936,6 @@ def handle_nl_question(df: pd.DataFrame, question: str):
     if gb and gb in df_filtered.columns:
         extra_group_stats = compare_midcategory_by_group(df_filtered, gb)
 
-    # 차트 유형 결정 및 시각화 (기존 로직 그대로)
-    chart_type = infer_chart_type(spec, df_filtered)
-    chart = None
-    if chart_type == "radar":
-        # ... (기존 radar 생성 코드)
-        pass  # 실제 코드로 대체
-    elif chart_type == "heatmap":
-        # ... (기존 heatmap 생성 코드)
-        pass
-    elif chart_type in ("grouped_bar", "bar"):
-        # ... (기존 grouped_bar / bar 생성 코드)
-        pass
-    else:
-        st.warning("자동으로 적절한 시각화를 추론하지 못했습니다.")
-
-    if chart is not None:
-        st.plotly_chart(chart, use_container_width=True)
-    else:
-        st.info("생성할 차트가 없습니다.")
-
-    # 설명 생성
-    explanation = generate_explanation_from_spec(df_filtered, spec, computed_metrics, extra_group_stats=extra_group_stats)
-    render_insight_card("자연어 기반 설명", explanation, key="nlq-insight")
 
 
 
