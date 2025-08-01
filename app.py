@@ -1449,7 +1449,7 @@ def page_segment_analysis(df):
     delta_df_for_prompt = group_means.set_index("조합")
     prompt_delta = build_delta_prompt(delta_df_for_prompt, midcats)
     delta_insight = call_gpt_for_insight(prompt_delta)
-    st.markdown(delta_insight)
+    render_insight_card("GPT 생성형 해석 (델타 히트맵)", delta_insight, key="heatmap")
 
 #신뢰구간 포함 편차 바 차트 해석
 
@@ -1490,8 +1490,7 @@ def page_segment_analysis(df):
         st.markdown("#### GPT 생성형 해석 (신뢰구간)")
         prompt_ci = build_ci_prompt(subset_local, mc)
         ci_insight = call_gpt_for_insight(prompt_ci)
-        st.markdown(ci_insight)
-
+        render_insight_card("GPT 생성형 해석 (신뢰구간)",ci_insight, key="heatmap")
 
 def show_basic_strategy_insights(df):
     st.subheader("1. 이용 목적 (DQ4 계열) × 전반 만족도 (중분류 기준 레이더)")
