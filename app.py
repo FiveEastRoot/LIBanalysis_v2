@@ -76,7 +76,12 @@ def extract_question_code(col_name: str) -> str:
     return col_name.strip()
 
 def get_questions_used(spec: dict, df: pd.DataFrame, df_filtered: pd.DataFrame):
+    """
+    자연어 질의 스펙과 필터링된 데이터 기준으로 어떤 컬럼(문항)이 분석에 쓰였는지 반환.
+    반환: (전체 컬럼명 리스트, 문항코드 리스트)
+    """
     used_full = set()
+
     # 명시된 x, y, groupby
     for key in ("x", "y", "groupby"):
         val = spec.get(key)
@@ -89,16 +94,15 @@ def get_questions_used(spec: dict, df: pd.DataFrame, df_filtered: pd.DataFrame):
         if col and col in df.columns:
             used_full.add(col)
 
-    # 중분류 관련 문항 (compute_midcategory_scores가 참조하는 컬럼)
+    # 중분류 관련 문항(필터된 서브셋에 있는 것 기준으로)
     for mid, predicate in MIDDLE_CATEGORY_MAPPING.items():
         cols = [c for c in df.columns if predicate(c)]
-        if not cols:
-            continue
-        # 필터된 대상에도 존재하면 포함
-        if any(c in df_filtered.columns for c in cols):
-            used_full.update([c for c in cols if c in df_filtered.columns])
+        # 이 중 df_filtered에 실제로 남아 있는 컬럼들을 포함
+        for c in cols:
+            if c in df_filtered.columns:
+                used_full.add(c)
 
-    # groupby가 있으면 포함
+    # groupby도 포함 (중복 방지)
     gb = spec.get("groupby")
     if gb and gb in df_filtered.columns:
         used_full.add(gb)
@@ -106,7 +110,6 @@ def get_questions_used(spec: dict, df: pd.DataFrame, df_filtered: pd.DataFrame):
     used_full = sorted(used_full)
     used_codes = sorted({extract_question_code(c) for c in used_full})
     return used_full, used_codes
-
 
 # ─────────────────────────────────────────────────────
 # 전처리/매핑 유틸
@@ -869,9 +872,15 @@ def handle_nl_question(df: pd.DataFrame, question: str):
         "deltas": deltas,
         "top_segments": top_segments
     }
+        # 참고한 문항 추출
     questions_used_full, questions_used_codes = get_questions_used(spec, df, df_filtered)
     computed_metrics["questions_used_full"] = questions_used_full
     computed_metrics["questions_used_codes"] = questions_used_codes
+
+    # UI에 문항 코드만 간단히 노출
+    if questions_used_codes:
+        st.markdown("**참고한 문항 (문항번호만):** " + ", ".join(questions_used_codes))
+
     # 그룹 비교 통계 (groupby가 있으면)
     extra_group_stats = None
     gb = spec.get("groupby")
