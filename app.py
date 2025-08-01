@@ -61,6 +61,90 @@ def interpret_midcategory_scores(df):
         parts.append("모든 중분류가 전체 평균 수준과 비슷합니다.")
     return " ".join(parts)
 
+# ---------- 텍스트 안전 처리 ----------
+def escape_tilde(text: str) -> str:
+    # Markdown이 ~를 취소선으로 해석하지 않도록 HTML 엔티티로 치환
+    # 단순히 \~로 하면 일부 렌더링에서 안 먹힐 수 있어서 &#126; 사용
+    return str(text).replace("~", "&#126;")
+
+def safe_segment_label(label: str) -> str:
+    # 조합 라벨 등 길고 복잡한 텍스트에 대해 tilde 포함 안전하게 처리
+    return escape_tilde(label)
+
+# ---------- 요약 카드 렌더링 ----------
+def render_summary_card(title: str, body_md: str):
+    """Streamlit에서 카드 스타일로 요약을 보여주는 helper"""
+    st.markdown(f"""
+    <div style="
+        padding:16px;
+        background:#f0f4f8;
+        border-left:4px solid #2563eb;
+        border-radius:8px;
+        margin-bottom:12px;
+        line-height:1.4;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto;">
+      <div style="font-size:18px; font-weight:600; margin-bottom:6px;">{title}</div>
+      <div style="font-size:14px;">{body_md}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ---------- 룰 기반 요약 생성 ----------
+def rule_based_midcategory_summary(mid_scores: pd.Series) -> str:
+    if mid_scores.empty:
+        return "중분류 점수를 계산할 수 없습니다."
+    overall = mid_scores.mean()
+    higher = [m for m, v in mid_scores.items() if v > overall]
+    lower = [m for m, v in mid_scores.items() if v < overall]
+    high_txt = ", ".join(escape_tilde(m) for m in higher) if higher else "없음"
+    low_txt = ", ".join(escape_tilde(m) for m in lower) if lower else "없음"
+    body = (
+        f"전체 중분류 평균은 <strong>{overall:.1f}점</strong>입니다. "
+        f"평균보다 높은 중분류: <span style='color:green;'>{high_txt}</span>. "
+        f"평균보다 낮은 중분류: <span style='color:red;'>{low_txt}</span>."
+    )
+    return body
+
+def rule_based_delta_summary(group_means: pd.DataFrame, midcats: list) -> str:
+    overall_vec = group_means[midcats].mean(axis=0)
+    lines = []
+    # 각 중분류별로 가장 높은/낮은 편차 조합 추출
+    for mc in midcats:
+        if mc not in group_means:
+            continue
+        delta_col = mc  # 원래 값
+        # 전체 평균 대비 편차
+        diffs = group_means[mc] - overall_vec[mc]
+        if diffs.empty:
+            continue
+        best_idx = diffs.idxmax()
+        worst_idx = diffs.idxmin()
+        best_combo = group_means.loc[best_idx, "조합"] if "조합" in group_means.columns else ""
+        worst_combo = group_means.loc[worst_idx, "조합"] if "조합" in group_means.columns else ""
+        best_val = diffs.loc[best_idx]
+        worst_val = diffs.loc[worst_idx]
+        lines.append(f"**{escape_tilde(mc)}**: 가장 높은 편차: {escape_tilde(best_combo)} ({best_val:+.1f}), "
+                     f"가장 낮은 편차: {escape_tilde(worst_combo)} ({worst_val:+.1f})")
+    if not lines:
+        return "전체 평균 대비 편차 요약을 생성할 수 없습니다."
+    return "<br>".join(lines)
+
+
+def rule_based_extreme_summary(group_means: pd.DataFrame, midcats: list) -> str:
+    overall = group_means[midcats].mean(axis=0)
+    lines = []
+    for _, row in group_means.iterrows():
+        diffs = {mc: row[mc] - overall[mc] for mc in midcats if mc in row}
+        large = {k: v for k,v in diffs.items() if abs(v) >= 10}
+        if not large:
+            continue
+        combo = row.get("조합", "")
+        sublines = [f"{escape_tilde(k)}: {v:+.1f}" for k,v in large.items()]
+        lines.append(f"**{escape_tilde(combo)}**<br>  - " + "<br>  - ".join(sublines))
+    if not lines:
+        return "뛰어난 편차 조합이 없습니다."
+    return "<br><br>".join(lines)
+
+
 # ─────────────────────────────────────────────────────
 # 전처리/매핑 유틸
 # ─────────────────────────────────────────────────────
@@ -1297,7 +1381,7 @@ def page_segment_analysis(df):
 
     colors = DEFAULT_PALETTE
     for i, (_, row) in enumerate(top_df.iterrows()):
-        combo_label = " | ".join([str(row[c]) for c in segment_cols_filtered])
+        combo_label = " | ".join([safe_segment_label(str(row[c])) for c in segment_cols_filtered])
         vals = [row[mc] if not pd.isna(row[mc]) else overall_profile.get(mc, overall_profile.mean()) for mc in midcats]
         vals_closed = vals + [vals[0]]
         fig_radar.add_trace(go.Scatterpolar(
@@ -1330,7 +1414,7 @@ def page_segment_analysis(df):
     # 조합 데이터 직렬화
     combos = []
     for _, row in top_df.iterrows():
-        combo_label = " | ".join([str(row[c]) for c in segment_cols_filtered])
+        combo_label = " | ".join([safe_segment_label(str(row[c])) for c in segment_cols_filtered])
         profile = {mc: row.get(mc, overall_profile.get(mc, overall_profile.mean())) for mc in midcats}
         combos.append({"label": combo_label, "n": int(row["응답자수"]), "profile": profile})
     prompt = build_radar_prompt(overall_profile_dict, combos)
@@ -1385,7 +1469,10 @@ def page_segment_analysis(df):
     )
     st.plotly_chart(fig_delta, use_container_width=True)
 
-    st.markdown("#### Delta 히트맵 룰 기반 요약")
+    # 히트맵 아래 룰 기반 요약 카드
+    delta_summary_md = rule_based_delta_summary(group_means, midcats)
+    render_summary_card("Delta 히트맵 룰 기반 요약", delta_summary_md)
+
     # 룰 기반: 평균 대비 가장 큰 플러스/마이너스 조합 추출
     delta_summary_parts = []
     for mc in midcats:
@@ -1893,6 +1980,10 @@ elif mode == "심화 분석":
             st.plotly_chart(radar, use_container_width=True)
             tbl_avg = midcategory_avg_table(df)
             if not tbl_avg.empty:
+                # 룰 기반 요약을 카드로 보여줌
+                mid_scores = compute_midcategory_scores(df)
+                summary_body = rule_based_midcategory_summary(mid_scores)
+                render_summary_card("전체 중분류 평균 요약", summary_body)
                 show_table(tbl_avg, "중분류별 평균 점수")
                 st.markdown("---")
             else:
