@@ -608,6 +608,22 @@ def extract_keyword_and_audience(responses, batch_size=20):
             results.append((row['response'], row['keywords'], row['audience']))
     return results
 
+def call_gpt_for_insight(prompt, model="gpt-4.1-nano", temperature=0.2, max_tokens=500):
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "너는 전략 리포트 작성자이며, 주어진 데이터를 바탕으로 명확하고 간결한 인사이트를 제공해야 한다."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        content = resp.choices[0].message.content.strip()
+        return content
+    except Exception as e:
+        logging.warning(f"GPT 호출 실패: {e}")
+        return f"GPT 해석 생성에 실패했습니다: {e}"
 
 def build_radar_prompt(overall_profile: dict, combos: list):
     # combos: list of dicts with keys: label (e.g. "여성 | 30-34세"), n, profile (dict of midcat->score)
@@ -842,7 +858,9 @@ def generate_explanation_from_spec(df_subset: pd.DataFrame, spec: dict, computed
     출력만 텍스트로 해줘.
     """
 
-    return explanation.replace("~", "-")
+    explanation = call_gpt_for_insight(prompt)
+    explanation = explanation.replace("~", "-")
+    render_insight_card("GPT 생성형 해석", explanation, key="explanation")
 
 
 def apply_filters(df: pd.DataFrame, filters: list):
@@ -1791,13 +1809,14 @@ def page_segment_analysis(df):
     safe_markdown(high_low_summary)
 
     # GPT 기반 해석 (레이더)
-    st.markdown("#### GPT 생성형 해석")
     combos = []
     for _, row in top_df.iterrows():
         combo_label = " | ".join([str(row[c]) for c in segment_cols_filtered])
         profile = {mc: row.get(mc, overall_profile.get(mc, overall_profile.mean())) for mc in midcats}
         combos.append({"label": combo_label, "n": int(row["응답자수"]), "profile": profile})
     prompt = build_radar_prompt(overall_profile_dict, combos)
+    insight_text = call_gpt_for_insight(prompt)
+    insight_text = insight_text.replace("~", "-")
     render_insight_card("GPT 생성형 해석", insight_text, key="segment-radar")
 
     # 조합명 생성 및 delta 계산 (전체 평균 기준)
@@ -1821,9 +1840,10 @@ def page_segment_analysis(df):
     st.markdown("#### 히트맵 룰 기반 요약")
     st.write("**전체 평균 대비 중분류 평균 프로파일**")
 
-    st.markdown("#### GPT 생성형 해석 (히트맵)")
     heatmap_table = group_means[[*segment_cols_filtered, *midcats, "응답자수"]]
     prompt_heat = build_heatmap_prompt(heatmap_table.rename(columns={"응답자수": "응답자수"}), midcats)
+    heat_insight = call_gpt_for_insight(prompt_heat)
+    heat_insight = heat_insight.replace("~", "-")
     render_insight_card("GPT 생성형 해석 (히트맵)", heat_insight, key="heatmap-insight")
 
     # 델타 히트맵
@@ -1852,10 +1872,10 @@ def page_segment_analysis(df):
                 delta_summary_parts.append(f"{mc}에서 가장 낮은 편차: {top_neg.iloc[0]['조합']} ({top_neg.iloc[0][col_delta]:.1f})")
     st.text("；".join(delta_summary_parts) if delta_summary_parts else "의미 있는 편차를 발견하지 못했습니다.")
 
-    st.markdown("#### GPT 생성형 해석 (Delta)")
     delta_df_for_prompt = group_means.set_index("조합")
     prompt_delta = build_delta_prompt(delta_df_for_prompt, midcats)
-
+    delta_insight = call_gpt_for_insight(prompt_delta)
+    delta_insight = delta_insight.replace("~", "-")
     render_insight_card("GPT 생성형 해석 (델타 히트맵)", delta_insight, key="delta-heatmap-insight")
 
 #신뢰구간 포함 편차 바 차트 해석
@@ -1894,8 +1914,8 @@ def page_segment_analysis(df):
             ci_summary.append(f"{combo}: 편차 {delta:.1f}, SE {se:.2f} ({signif})")
         safe_markdown("；".join(ci_summary))
 
-        st.markdown("#### GPT 생성형 해석 (신뢰구간)")
-
+        prompt_ci = build_ci_prompt(subset_local, mc)
+        ci_insight = call_gpt_for_insight(prompt_ci)
         render_insight_card("GPT 생성형 해석 (신뢰구간)", ci_insight, key="ci-insight")
 
 def show_basic_strategy_insights(df):
