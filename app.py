@@ -1801,6 +1801,14 @@ def page_segment_analysis(df):
     )
     st.plotly_chart(fig_abs, use_container_width=True)
 
+    st.markdown("#### 히트맵 룰 기반 요약")
+    st.write("**전체 평균 대비 중분류 평균 프로파일**")
+
+    heatmap_table = group_means[[*segment_cols_filtered, *midcats, "응답자수"]]
+    prompt_heat = build_heatmap_prompt(heatmap_table.rename(columns={"응답자수": "응답자수"}), midcats)
+    heat_insight = call_gpt_for_insight(prompt_heat)
+    heat_insight = heat_insight.replace("~", "-")
+    render_insight_card("GPT 생성형 해석 (히트맵)", heat_insight, key="heatmap-insight")
 
     # 델타 히트맵
     delta_plot = group_means.set_index("조합")[[f"{mc}_delta" for mc in midcats]]
@@ -1815,6 +1823,18 @@ def page_segment_analysis(df):
     )
     st.plotly_chart(fig_delta, use_container_width=True)
 
+    st.markdown("#### Delta 히트맵 룰 기반 요약")
+    delta_summary_parts = []
+    for mc in midcats:
+        col_delta = f"{mc}_delta"
+        if col_delta in group_means:
+            top_pos = group_means.nlargest(1, col_delta)
+            top_neg = group_means.nsmallest(1, col_delta)
+            if not top_pos.empty:
+                delta_summary_parts.append(f"{mc}에서 가장 높은 편차: {top_pos.iloc[0]['조합']} (+{top_pos.iloc[0][col_delta]:.1f})")
+            if not top_neg.empty:
+                delta_summary_parts.append(f"{mc}에서 가장 낮은 편차: {top_neg.iloc[0]['조합']} ({top_neg.iloc[0][col_delta]:.1f})")
+    st.text("；".join(delta_summary_parts) if delta_summary_parts else "의미 있는 편차를 발견하지 못했습니다.")
 
     delta_df_for_prompt = group_means.set_index("조합")
     prompt_delta = build_delta_prompt(delta_df_for_prompt, midcats)
