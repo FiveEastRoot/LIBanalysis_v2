@@ -633,18 +633,44 @@ def build_radar_prompt(overall_profile: dict, combos: list):
         combo_lines.append(f"{c['label']} (응답자수={c['n']}): {prof}")
     combo_str = "\n".join(combo_lines)
     prompt = f"""
-전략 보고서용 - 레이더 차트 해석. 입력: 전체 평균 중분류 만족도: {overall_str} / 조합별 프로파일:
+전략 보고서용 - 레이더 차트 해석
+
+입력:
+- 전체 평균 중분류 만족도: {overall_str}
+- 조합별 프로파일:
 {combo_str}
+
 요청:
-1. 각 조합명에 대해 전체 평균과 비교해 강점과 약점을 2문장씩 설명.
-2. 대비되는 두 조합명을 골라 차이 나는 중분류와 인사이트 설명.
-3. 관찰되는 패턴 3개 도출.
-4. 우선 개입할 조합명 3개와 구체적 행동 제안.
+1. 각 조합명에 대해 전체 평균과 비교해 강점, 약점을 2문장 이내로 요약.
+2. 대비되는 두 조합명을 골라 주요 차이점과 시사점 제시.
+3. 전체 패턴 3개를 한 문장씩 도출.
+4. 우선 공략·보완할 조합명을 명시해 3가지 행동 방향 제안.
 -은 모두 -로, 숫자 한 자리 소수, 조합명 반복, 소제목 포함, 길이 500자 내외.
+
+[출력 예시]
+---
+### 1. 조합별 강점·약점
+* 여성 | 30-34세는 정보 획득이 전체 평균보다 높아 강점이며, 소통 및 정책 활용은 낮아 약점이다.
+* 남성 | 40-44세는 문화-교육 향유가 평균 대비 높고, 공간-이용편의성은 낮다.
+
+### 2. 대비되는 조합 비교
+여성 | 30-34세는 정보 획득에서, 남성 | 40-44세는 문화-교육 향유에서 두드러진 차이를 보인다. 이 차이는 연령과 성별에 따른 서비스 요구 차이로 해석된다.
+
+### 3. 전체 패턴 요약
+* 30대 여성 조합이 정보 획득에서 일관된 강점을 보인다.
+* 40대 남성 조합은 문화-교육 영역이 높고, 소통은 낮다.
+* 전반적으로 소통 및 정책 활용이 다수 조합에서 약점이다.
+
+### 4. 전략적 시사점
+* 여성 | 30-34세에 정보 활용 특화 프로그램을 우선 기획.
+* 남성 | 40-44세는 문화-교육 확대를 통한 만족도 유지.
+* 소통 및 정책 활용이 낮은 조합(전반)에 맞춤형 안내 강화 필요.
+---
 """
     return prompt.strip()
 
-def build_heatmap_prompt(table_df: pd.DataFrame, midcats: list):
+
+def build_heatmap_prompt(table_df, midcats):
     rows = []
     for _, r in table_df.iterrows():
         label = r.get("조합", "")
@@ -653,18 +679,41 @@ def build_heatmap_prompt(table_df: pd.DataFrame, midcats: list):
         rows.append(f"{label} (응답자수={n}): {scores}")
     table_str = "\n".join(rows)
     prompt = f"""
-전략 보고서용 - 히트맵 인사이트. 입력: 조합별 중분류 만족도:
+전략 보고서용 - 히트맵 인사이트
+
+입력:
+- 조합별 중분류 만족도:
 {table_str}
+
 요청:
-1. 비슷한 점수 패턴을 보이는 조합명 묶음(강점/약점) 정리.
-2. 응답자 수 충분한 조합명에서 일관된 강점과 약점 요약.
-3. 중분류별 전체 경향과 특정 조합명의 예외 설명.
-4. 요약 한 문단과 조합명을 포함한 행동 권장점 3개 제시.
--은 모두 -로, 숫자 한 자리 소수, 조합명 반복, 소제목 포함, 길이 500자 내외.
+1. 점수가 비슷한 조합명 그룹 묶어 특징 설명.
+2. 응답자 수가 충분한 조합에서 일관된 강점과 약점 요약.
+3. 전체 중분류별 경향성과 예외 조합 서술.
+4. 요약 한 문단, 조합명을 포함한 행동 권장점 3개 제시.
+-은 모두 -로, 숫자 한 자리 소수, 조합명 반복, 소제목 포함, 500자 내외.
+
+[출력 예시]
+---
+### 1. 그룹별 특징
+* 여성 | 30-34세, 여성 | 35-39세는 정보 획득과 문화-교육 향유가 모두 높다. 
+* 남성 | 50-54세 등은 대체로 모든 영역에서 낮다.
+
+### 2. 강점·약점 요약
+* 여성 | 30-34세는 정보 획득, 남성 | 40-44세는 문화-교육이 강점이다.
+* 대부분의 조합에서 소통 및 정책 활용이 약점이다.
+
+### 3. 전체 경향 및 예외
+* 전반적으로 정보 획득 점수가 높고, 소통은 모든 조합에서 낮은 경향이다.
+* 여성 | 40-44세만 소통 점수가 평균보다 높다.
+
+### 4. 요약 및 행동 권장점
+* 여성 30-40대는 정보 제공 서비스 확대, 50대 남성은 기초 프로그램 집중, 소통 점수 낮은 그룹 대상 안내·참여 기회 확대 권장.
+---
 """
     return prompt.strip()
 
-def build_delta_prompt(delta_df: pd.DataFrame, midcats: list):
+
+def build_delta_prompt(delta_df, midcats):
     rows = []
     for _, r in delta_df.iterrows():
         combo = r.name
@@ -672,17 +721,38 @@ def build_delta_prompt(delta_df: pd.DataFrame, midcats: list):
         rows.append(f"{combo}: {diffs}")
     table_str = "\n".join(rows)
     prompt = f"""
-전략 보고서용 - Delta 해석. 입력: 전체 평균 대비 조합명별 중분류 편차:
+전략 보고서용 - Delta 해석
+
+입력:
+- 전체 평균 대비 조합별 중분류 편차:
 {table_str}
+
 요청:
-1. 각 조합명별 가장 과도하게 높은/낮은 중분류 짚기.
-2. 비슷한 편차 패턴을 보이는 조합명 그룹화 설명.
-3. 조합명 기준 개입 우선순위 추천(왜 우선인지 포함).
--은 모두 -로, 숫자 한 자리 소수, 조합명 반복, 소제목 포함, 길이 500자 내외.
+1. 각 조합명별로 가장 높거나 낮은 중분류 짚기.
+2. 유사한 편차 패턴을 보이는 조합명 그룹화 설명.
+3. 우선 개선·확장할 조합명을 명시해 3가지 행동 제안.
+-은 모두 -로, 숫자 한 자리 소수, 조합명 반복, 소제목 포함, 500자 내외.
+
+[출력 예시]
+---
+### 1. 주요 편차 영역
+* 여성 | 30-34세는 정보 획득에서 +11.3, 소통-정책 활용에서 -8.5로 강한 편차.
+* 남성 | 40-44세는 문화-교육 향유에서 +9.2, 정보 획득에서 -6.1.
+
+### 2. 그룹화 패턴
+* 30-40대 여성 조합들이 정보 획득에 반복적으로 높은 편차.
+* 대부분의 남성 조합은 문화-교육에서 높고, 소통은 낮은 편차를 보인다.
+
+### 3. 개선·확장 우선순위
+* 정보 획득 편차 높은 여성 | 30-34세 확장 필요
+* 소통 낮은 그룹(남성 | 50-54세 등) 우선 개선
+* 문화-교육 높은 남성 | 40-44세 타겟 특화 필요.
+---
 """
     return prompt.strip()
 
-def build_ci_prompt(subset_df: pd.DataFrame, mc: str):
+
+def build_ci_prompt(subset_df, mc):
     rows = []
     for _, r in subset_df.iterrows():
         combo = r.get("조합", "")
@@ -691,17 +761,35 @@ def build_ci_prompt(subset_df: pd.DataFrame, mc: str):
         rows.append(f"{combo}: 편차 {delta:.1f}, 표준오차 {se:.2f}")
     table_str = "\n".join(rows)
     prompt = f"""
-전략 보고서용 - 중분류 '{mc}' 신뢰도 해석. 입력:
+전략 보고서용 - '{mc}' 신뢰도 해석
+
+입력:
 {table_str}
+
 요청:
-1. 편차가 실질적이라 판단되는 조합명 구분(표준오차 대비).
-2. 편차 크지만 불확실한 조합명 vs 안정적 조합명 비교.
-3. 우선 주목할 조합명 3개 추천(편차/불확실성 근거 포함).
--은 모두 -로, 숫자 한 자리 소수, 조합명 반복, 소제목 포함, 길이 500자 내외.
+1. 실질적(표준오차 대비 큰) 편차 조합명 구분.
+2. 불확실성 큰 조합 vs 안정적 조합 비교.
+3. 우선 주목할 조합명 3개, 근거 포함 추천.
+-은 모두 -로, 숫자 한 자리 소수, 조합명 반복, 소제목 포함, 500자 내외.
+
+[출력 예시]
+---
+### 1. 실질적 편차
+* 여성 | 30-34세(편차 7.2, 표준오차 1.1)는 실질적으로 높다.
+* 남성 | 50-54세(편차 -6.5, 표준오차 2.3)는 낮음.
+
+### 2. 불확실성과 안정성
+* 여성 | 40-44세(편차 4.2, 표준오차 3.0)는 편차는 있으나 불확실.
+* 여성 | 30-34세는 편차 크고 오차도 작아 신뢰성 높다.
+
+### 3. 우선 개입 조합
+여성 | 30-34세(확실한 강점), 남성 | 50-54세(확실한 약점), 여성 | 40-44세(불확실한 개선 필요) 순으로 우선 주목 필요.
+---
 """
     return prompt.strip()
 
-def build_small_multiple_prompt(top_df: pd.DataFrame, midcat: str, segment_cols_filtered: list):
+
+def build_small_multiple_prompt(top_df, midcat, segment_cols_filtered):
     rows = []
     for _, r in top_df.iterrows():
         combo = " | ".join(str(r[c]) for c in segment_cols_filtered)
@@ -712,13 +800,29 @@ def build_small_multiple_prompt(top_df: pd.DataFrame, midcat: str, segment_cols_
             rows.append(f"{combo}: 데이터 없음")
     table_str = "\n".join(rows)
     prompt = f"""
-전략 보고서용 - '{midcat}' 비교. 입력:
+전략 보고서용 - '{midcat}' 조합별 비교
+
+입력:
 {table_str}
+
 요청:
-1. 점수 분포와 순위 변동성 요약(어떤 조합명이 일관된지, 불안정한지).
-2. 특징적 outlier 조합명 지적 및 이유 설명.
-3. 일관된 패턴 보이는 조합명 그룹 묶음 설명.
--은 모두 -로, 숫자 한 자리 소수, 조합명 반복, 소제목 포함, 길이 500자 내외.
+1. 점수 분포와 순위 변동성(일관/불안정 조합) 요약.
+2. outlier 조합 지적 및 이유 설명.
+3. 일관 패턴 그룹 묶음 설명.
+-은 모두 -로, 숫자 한 자리 소수, 조합명 반복, 소제목 포함, 500자 내외.
+
+[출력 예시]
+---
+### 1. 점수 분포
+* 여성 | 30-34세, 여성 | 35-39세는 {midcat} 점수가 일관되게 높다. 
+* 남성 | 50-54세는 낮은 편이다.
+
+### 2. 특징적 outlier
+* 남성 | 40-44세가 유독 높은 점수(82.3)로 다른 조합과 차별화된다.
+
+### 3. 일관된 그룹
+* 30대 여성 조합은 {midcat}에서 강점을 보이고, 50대 남성은 약점을 보인다.
+---
 """
     return prompt.strip()
 
@@ -1636,17 +1740,17 @@ def plot_abc_grouped_bar(df_mean):
     fig.update_yaxes(range=[0,100])
     return fig
 
+def safe_markdown(text, **kwargs):
+    # 마크다운 해석에 따른 취소선 방지 (~ → \~ 또는 대체)
+    escaped = escape_tildes(text, mode="markdown").replace("~~", r"\~\~")
+    st.markdown(escaped, **kwargs)
+
 def page_segment_analysis(df):
     st.header("🧩 이용자 세그먼트 조합 분석")
     st.markdown("""
     - SQ1~5, DQ1, DQ2, DQ4(1순위) 중 **최대 3개** 문항 선택  
     - 선택한 보기 조합별(응답자 5명 이상)로 Q1~Q6, Q9-D-3, 공익성/기여도(Q7,Q8) 중분류별 만족도 평균을 **히트맵**으로 비교
     """)
-
-    def safe_markdown(text, **kwargs):
-        # 마크다운 해석에 따른 취소선 방지 (~ → \~ 또는 대체)
-        escaped = escape_tildes(text, mode="markdown").replace("~~", r"\~\~")
-        st.markdown(escaped, **kwargs)
 
     seg_labels = [o["label"] for o in SEGMENT_OPTIONS]
     sel = st.multiselect("세그먼트 조건 (최대 3개)", seg_labels, default=seg_labels[:2], max_selections=3)
