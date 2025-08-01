@@ -1167,40 +1167,53 @@ def page_segment_analysis(df):
     table_with_stats = group_means[table_cols]
 
 
-    # --- 추가 시각화 3: 상위 N개 세그먼트 조합 레이더 (중분류 프로파일) ---
+    # --- 응답자 수 기준 상위 10개 세그먼트 조합의 중분류 만족도 프로파일 비교 (단일 레이더) ---
     st.markdown("### 응답자 수 기준 상위 10개 세그먼트 조합의 중분류 만족도 프로파일 비교")
     top_n = 10
     top_df = group_means.nlargest(top_n, "응답자수").copy()
-    overall_mid_mean = overall_mean_of_means  # scalar
     midcats = list(MIDCAT_MAP.keys())
 
-    for i, row in top_df.iterrows():
-        combo_label = " | ".join([str(row[c]) for c in segment_cols_filtered])
-        values = [row[mc] if not pd.isna(row[mc]) else overall_means.get(mc, overall_mean_of_means) for mc in midcats]
-        overall_vals = [overall_means.get(mc, overall_mean_of_means) for mc in midcats]
+    # 전체 평균 프로파일 (reference)
+    overall_profile = group_means[midcats].mean(axis=0)
+    overall_vals = [overall_profile.get(mc, overall_profile.mean()) for mc in midcats]
+    overall_closed = overall_vals + [overall_vals[0]]
+    cats_closed = midcats + [midcats[0]]
 
-        fig_radar = go.Figure()
+    fig_radar = go.Figure()
+    # 전체 평균
+    fig_radar.add_trace(go.Scatterpolar(
+        r=overall_closed,
+        theta=cats_closed,
+        fill=None,
+        name="전체 평균",
+        line=dict(dash="dash", width=2),
+        opacity=0.8
+    ))
+
+    colors = px.colors.qualitative.Plotly
+    for i, (_, row) in enumerate(top_df.iterrows()):
+        combo_label = " | ".join([str(row[c]) for c in segment_cols_filtered])
+        vals = [row[mc] if not pd.isna(row[mc]) else overall_profile.get(mc, overall_profile.mean()) for mc in midcats]
+        vals_closed = vals + [vals[0]]
         fig_radar.add_trace(go.Scatterpolar(
-            r=values + [values[0]],
-            theta=midcats + [midcats[0]],
+            r=vals_closed,
+            theta=cats_closed,
             fill='toself',
-            name=f"{combo_label}"
+            name=f"{combo_label} (n={int(row['응답자수'])})",
+            hovertemplate="%{theta}: %{r:.1f}<extra></extra>",
+            marker=dict(color=colors[i % len(colors)]),
+            opacity=0.5
         ))
-        fig_radar.add_trace(go.Scatterpolar(
-            r=overall_vals + [overall_vals[0]],
-            theta=midcats + [midcats[0]],
-            fill=None,
-            name="전체 평균",
-            line=dict(dash='dash')
-        ))
-        fig_radar.update_layout(
-            polar=dict(radialaxis=dict(range=[50, 100])),
-            title=f"조합: {combo_label} (n={row['응답자수']})",
-            height=400,
-            showlegend=True,
-            margin=dict(t=40, b=20)
-        )
-        st.plotly_chart(fig_radar, use_container_width=True)
+
+    fig_radar.update_layout(
+        polar=dict(radialaxis=dict(range=[50, 100])),
+        title=f"상위 {min(top_n, len(top_df))}개 세그먼트 조합 중분류 만족도 프로파일 vs 전체 평균",
+        height=500,
+        showlegend=True,
+        legend=dict(orientation="v", y=0.85, x=1.02)
+    )
+    st.plotly_chart(fig_radar, use_container_width=True)
+
     # --- 추가 지표/편차 계산 ---
     # 전체 중분류별 평균 벡터
     overall_means = group_means[midcats].mean(axis=0)
