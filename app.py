@@ -125,7 +125,6 @@ def escape_tildes(text: str, mode: str = "html") -> str:
         text = text.replace("~~", r"\~\~")
         return text.replace("~", r"\~")
 
-
 # ─────────────────────────────────────────────────────
 # DataFrame & visualization helpers
 # ─────────────────────────────────────────────────────
@@ -166,6 +165,25 @@ def render_chart_and_table(bar, table, title, key_prefix=""):
 
 def show_table(df, caption):
     st.dataframe(df)
+
+def render_insight_card(title: str, content: str, key: str = None):
+    # HTML 컨텍스트용 escape 처리
+    content_html = escape_tildes(content, mode="html").replace("\n", "<br>")
+    st.markdown(f"""
+    <div style="
+        border:1px solid #e2e8f0;
+        border-radius:12px;
+        padding:16px;
+        margin-bottom:16px;
+        background: #ffffff;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.04);
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', Arial;
+    ">
+        <h4 style="margin:0 0 8px 0; font-size:1.1rem;">{title}</h4>
+        <div style="font-size:0.95em; line-height:1.4em;">{content_html}</div>
+    </div>
+    """, unsafe_allow_html=True, key=key)
+
 
 # ─────────────────────────────────────────────────────
 # Likert / 중분류 점수 계산
@@ -1351,7 +1369,7 @@ def page_segment_analysis(df):
         combos.append({"label": combo_label, "n": int(row["응답자수"]), "profile": profile})
     prompt = build_radar_prompt(overall_profile_dict, combos)
     insight_text = call_gpt_for_insight(prompt)
-    st.markdown(escape_tildes(insight_text, mode="markdown").replace("\n", "  \n"))
+    render_insight_card("GPT 생성형 해석", insight_text, key="segment-radar")
 
     overall_means = group_means[midcats].mean(axis=0)
     for mc in midcats:
@@ -1396,7 +1414,8 @@ def page_segment_analysis(df):
     st.markdown("#### GPT 생성형 해석 (히트맵)")
     prompt_heat = build_heatmap_prompt(heatmap_table[[*segment_cols_filtered, *midcats, "응답자수"]].rename(columns={"응답자수": "응답자수"}), midcats)
     heat_insight = call_gpt_for_insight(prompt_heat)
-    st.markdown(escape_tildes(heat_insight, mode="markdown").replace("\n", "  \n"))
+    render_insight_card("GPT 생성형 해석 (히트맵)", heat_insight, key="heatmap")
+
 
 #델타 히트맵
 
@@ -1430,8 +1449,7 @@ def page_segment_analysis(df):
     delta_df_for_prompt = group_means.set_index("조합")
     prompt_delta = build_delta_prompt(delta_df_for_prompt, midcats)
     delta_insight = call_gpt_for_insight(prompt_delta)
-    st.markdown(escape_tildes(delta_insight, mode="markdown").replace("\n", "  \n"))
-
+    st.markdown(delta_insight)
 
 #신뢰구간 포함 편차 바 차트 해석
 
@@ -1472,7 +1490,7 @@ def page_segment_analysis(df):
         st.markdown("#### GPT 생성형 해석 (신뢰구간)")
         prompt_ci = build_ci_prompt(subset_local, mc)
         ci_insight = call_gpt_for_insight(prompt_ci)
-        st.markdown(escape_tildes(ci_insight, mode="markdown").replace("\n", "  \n"))
+        st.markdown(ci_insight)
 
 
 def show_basic_strategy_insights(df):
