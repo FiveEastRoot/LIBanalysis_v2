@@ -1534,41 +1534,7 @@ def page_segment_analysis(df):
         st.markdown(ci_insight)
 
 
-    st.markdown("### Small Multiples: 중분류별 세그먼트 조합 비교 (상위 10개)")
-    top3 = group_means.nlargest(10, "응답자수").copy()
-    for mc in midcats:
-        tmp = top3[[*segment_cols_filtered, mc, "응답자수"]].copy()
-        tmp["조합"] = tmp.apply(lambda r: " | ".join([str(r[c]) for c in segment_cols_filtered]), axis=1)
-        fig_small = px.bar(
-            tmp,
-            x="조합",
-            y=mc,
-            text=mc,
-            title=f"{mc} 비교 (상위 10개 세그먼트 조합)"
-        )
-        fig_small.update_traces(texttemplate='%{text:.1f}', textposition='outside')
-        st.plotly_chart(fig_small, use_container_width=True)
-        st.markdown(f"#### '{mc}' Small Multiples 룰 기반 요약")
-        # 간단한 분산/순위 설명
-        vals = top3[mc].dropna()
-        if not vals.empty:
-            range_span = vals.max() - vals.min()
-            st.write(f"{mc} 점수 범위: {vals.min():.1f} ~ {vals.max():.1f} (범위 {range_span:.1f}).")
-            # outlier: 상위/하위 하나씩
-            highest = top3.nlargest(1, mc)
-            lowest = top3.nsmallest(1, mc)
-            st.write(f"가장 높은 조합: {' | '.join(str(highest.iloc[0][c]) for c in segment_cols_filtered)} ({highest.iloc[0][mc]:.1f}); 가장 낮은 조합: {' | '.join(str(lowest.iloc[0][c]) for c in segment_cols_filtered)} ({lowest.iloc[0][mc]:.1f}).")
-        else:
-            st.write("데이터가 충분하지 않습니다.")
 
-        st.markdown(f"#### GPT 생성형 해석 (Small Multiples - {mc})")
-        prompt_small = build_small_multiple_prompt(top3, mc, segment_cols_filtered)
-        small_insight = call_gpt_for_insight(prompt_small)
-        st.markdown(small_insight)
-
-
-    st.markdown("#### 세그먼트 조합별 중분류별 만족도 및 응답자수")
-    st.dataframe(table_with_stats, use_container_width=True)
 
 def show_basic_strategy_insights(df):
     st.subheader("1. 이용 목적 (DQ4 계열) × 전반 만족도 (중분류 기준 레이더)")
