@@ -1166,25 +1166,6 @@ def page_segment_analysis(df):
     table_cols = segment_cols_filtered + midcats + ["중분류평균", "전체평균대비편차", "응답자수"]
     table_with_stats = group_means[table_cols]
 
-    # 6. 히트맵 세로축 라벨: 응답만 나열
-    def row_label(row):
-        return " | ".join([str(row[col]) for col in segment_cols_filtered])
-    group_means["조합"] = group_means.apply(row_label, axis=1)
-    heatmap_plot = group_means.set_index("조합")[midcats]
-
-    # 7. 히트맵 시각화
-    fig = px.imshow(
-        heatmap_plot,
-        text_auto=True,
-        aspect="auto",
-        color_continuous_scale="RdYlBu_r",
-        range_color=[50, 100],
-        labels=dict(x="중분류", y="세그먼트 조합", color="평균점수"),
-        title="세그먼트별 중분류 만족도 히트맵"
-    )
-    fig.update_layout(height=300 + 24*len(heatmap_plot), yaxis_nticks=min(len(heatmap_plot), 30))
-    st.plotly_chart(fig, use_container_width=True)
-
 
     # --- 추가 시각화 3: 상위 N개 세그먼트 조합 레이더 (중분류 프로파일) ---
     st.markdown("### 응답자 수 기준 상위 10개 세그먼트 조합의 중분류 만족도 프로파일 비교")
