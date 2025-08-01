@@ -1004,8 +1004,6 @@ def parse_natural_language_query(question: str, model="gpt-4", system_prompt=Non
         - {"x": ..., "y": ..., "groupby": ..., "filters": ..., "focus": ..., "chart_type": ...}
     """
 
-    import openai
-
     if system_prompt is None:
         system_prompt = (
             "다음은 설문조사 데이터를 기반으로 시각화를 위한 요청입니다. "
