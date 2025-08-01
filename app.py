@@ -30,7 +30,7 @@ def safe_chat_completion(*, messages, temperature=0.2, max_tokens=300, retries=3
     for attempt in range(1, retries + 1):
         try:
             resp = client.chat.completions.create(
-                model= "gpt-4.1-nano",
+                model= "gpt-4.1-nano-2025-04-14",
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens
@@ -291,7 +291,7 @@ def extract_keyword_and_audience(responses, batch_size=20):
 """
         try:
             resp = safe_chat_completion(
-                model="gpt-4.1-nano",
+                model="gpt-4.1-nano-2025-04-14",
                 messages=[{"role": "system", "content": prompt}],
                 temperature=0.2,
                 max_tokens=300
@@ -330,7 +330,7 @@ def extract_keyword_and_audience(responses, batch_size=20):
 def call_gpt_for_insight(prompt, temperature=0.25, max_tokens=400):
     try:
         resp = client.chat.completions.create(
-            model="gpt-4.1-nano",
+            model="gpt-4.1-nano-2025-04-14",
             messages=[
                 {"role": "system", "content": "너는 전략 리포트 작성자이며, 주어진 데이터를 바탕으로 명확하고 간결한 인사이트를 제공해야 한다."},
                 {"role": "user", "content": prompt}
