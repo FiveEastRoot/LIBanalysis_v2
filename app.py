@@ -1803,8 +1803,6 @@ def page_segment_analysis(df):
     )
     st.plotly_chart(fig_abs, use_container_width=True)
 
-    st.markdown("#### 히트맵 룰 기반 요약")
-    st.write("**전체 평균 대비 중분류 평균 프로파일**")
 
     heatmap_table = group_means[[*segment_cols_filtered, *midcats, "응답자수"]]
     prompt_heat = build_heatmap_prompt(heatmap_table.rename(columns={"응답자수": "응답자수"}), midcats)
@@ -1825,7 +1823,6 @@ def page_segment_analysis(df):
     )
     st.plotly_chart(fig_delta, use_container_width=True)
 
-    st.markdown("#### Delta 히트맵 룰 기반 요약")
     delta_summary_parts = []
     for mc in midcats:
         col_delta = f"{mc}_delta"
@@ -1846,7 +1843,6 @@ def page_segment_analysis(df):
 
 #신뢰구간 포함 편차 바 차트 해석
 
-    st.markdown("### 전체 평균 대비 편차와 간이 신뢰구간 (중분류별)")
     for mc in midcats[:2]:
         subset = group_means.nlargest(10, "응답자수").copy()
         subset["delta"] = subset[mc] - overall_means[mc]
@@ -1878,7 +1874,6 @@ def page_segment_analysis(df):
             ci_upper = delta + se
             signif = "유의미" if not (ci_lower <= 0 <= ci_upper) else "불확실"
             ci_summary.append(f"{combo}: 편차 {delta:.1f}, SE {se:.2f} ({signif})")
-        safe_markdown("；".join(ci_summary))
 
         prompt_ci = build_ci_prompt(subset_local, mc)
         ci_insight = call_gpt_for_insight(prompt_ci)
