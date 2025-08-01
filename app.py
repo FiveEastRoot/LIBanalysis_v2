@@ -1186,9 +1186,9 @@ def page_segment_analysis(df):
         theta=cats_closed,
         fill=None,
         name="전체 평균",
-        line=dict(dash="dash", width=2),
+        line=dict(dash="dash", width=3, color = "RED"),
         opacity=1
-        
+
     ))
 
     colors = px.colors.qualitative.Plotly
