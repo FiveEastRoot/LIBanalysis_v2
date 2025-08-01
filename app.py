@@ -887,19 +887,19 @@ def handle_nl_question(df: pd.DataFrame, question: str):
     else:
         top_segments.append({"label": "필터된 전체", "n": len(df_filtered), "profile": overall_mid_dict})
 
-    computed_metrics = {
-        "overall_mid_scores": overall_mid_dict,
-        "deltas": deltas,
-        "top_segments": top_segments
-    }
-        # 참고한 문항 추출
-    questions_used_full, questions_used_codes = get_questions_used(spec, df, df_filtered)
-    computed_metrics["questions_used_full"] = questions_used_full
-    computed_metrics["questions_used_codes"] = questions_used_codes
+        computed_metrics = {
+            "overall_mid_scores": overall_mid_dict,
+            "deltas": deltas,
+            "top_segments": top_segments
+        }
+            # 참고한 문항 추출
+        questions_used_full, questions_used_codes = get_questions_used(spec, df, df_filtered)
+        computed_metrics["questions_used_full"] = questions_used_full
+        computed_metrics["questions_used_codes"] = questions_used_codes
 
-    # UI에 문항 코드만 간단히 노출
-    if questions_used_codes:
-        st.markdown("**참고한 문항 (문항번호만):** " + ", ".join(questions_used_codes))
+        # UI에 문항 코드만 간단히 노출
+        if questions_used_codes:
+            st.markdown("**참고한 문항 (문항번호만):** " + ", ".join(questions_used_codes))
 
     # 그룹 비교 통계 (groupby가 있으면)
     extra_group_stats = None
