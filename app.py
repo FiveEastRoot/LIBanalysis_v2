@@ -776,39 +776,6 @@ def parse_nl_query_to_spec(question: str):
         }
     return spec
 
-def infer_chart_type(spec: dict, df_subset: pd.DataFrame):
-    # chart이 주어져 있지 않으면 스펙 + 키워드로 추론
-    chart = spec.get("chart")
-    focus = spec.get("focus", "").lower() if spec.get("focus") else ""
-    groupby = spec.get("groupby")
-    x = spec.get("x")
-    y = spec.get("y")
-
-    if chart:
-        return chart  # 명시적이면 그대로
-
-    # 전체 평균 대비, 강점/약점 언급: radar + delta 우선
-    if any(k in focus for k in ["전체 평균 대비", "강점", "약점", "비교"]):
-        if groupby or x is None:
-            return "radar"
-        if x and not groupby:
-            return "delta_bar"
-
-    # groupby + 중분류 비교
-    if groupby and (("중분류" in (x or "").lower()) or "만족도" in (focus or "").lower()):
-        return "grouped_bar"
-
-    # 분포 관련
-    if any(k in focus for k in ["분포", "연령대", "비율", "많이"]):
-        if x:
-            return "bar"
-
-    # 패턴, 군집 -> heatmap
-    if any(k in focus for k in ["패턴", "군집", "비슷한", "차이"]):
-        return "heatmap"
-
-    # default fallback
-    return "bar"
 
 def generate_explanation_from_spec(df_subset: pd.DataFrame, spec: dict, computed_metrics: dict, extra_group_stats=None):
     focus = spec.get("focus", "기본 요약")
@@ -935,7 +902,6 @@ def handle_nl_question(df: pd.DataFrame, question: str):
     extra_group_stats = None
     if gb and gb in df_filtered.columns:
         extra_group_stats = compare_midcategory_by_group(df_filtered, gb)
-
 
 
     # 설명 생성
