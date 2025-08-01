@@ -293,6 +293,40 @@ def plot_midcategory_radar(df):
 # GPT 관련 헬퍼
 # ─────────────────────────────────────────────────────
 
+def get_questions_used(spec: dict, df: pd.DataFrame, df_filtered: pd.DataFrame):
+    used = set()
+
+    # 명시된 x, y, groupby
+    for key in ("x", "y", "groupby"):
+        val = spec.get(key)
+        if val and val in df.columns:
+            used.add(val)
+
+    # 필터에 쓰인 컬럼
+    for f in spec.get("filters", []):
+        col = f.get("col")
+        if col and col in df.columns:
+            used.add(col)
+
+    # 중분류 관련: focus나 차트 타입에 따라 포함된 중분류 계산에 쓰인 원본 문항들
+    # 예: radar, delta, heatmap 등에서 compute_midcategory_scores가 참조한 문항
+    # MIDDLE_CATEGORY_MAPPING은 predicate 함수이므로 해당 predicate로 필터
+    for mid, predicate in MIDDLE_CATEGORY_MAPPING.items():
+        # 이 중분류가 현재 필터된 데이터에 대해서 계산되었는지 확인
+        cols = [c for c in df.columns if predicate(c)]
+        if not cols:
+            continue
+        # 만약 필터된 대상의 중분류 점수가 생성되었다면 (즉, df_filtered에도 해당 컬럼이 존재)
+        if any(c in df_filtered.columns for c in cols):
+            used.update([c for c in cols if c in df_filtered.columns])
+
+    # 기타: groupby가 세그먼트 조합일 경우, 조합에 쓰인 파생 컬럼도 포함
+    gb = spec.get("groupby")
+    if gb and gb in df_filtered.columns:
+        used.add(gb)
+
+    return sorted(used)
+
 def cohen_d(x, y):
     x = np.array(x.dropna(), dtype=float)
     y = np.array(y.dropna(), dtype=float)
@@ -711,22 +745,26 @@ def generate_explanation_from_spec(df_subset: pd.DataFrame, spec: dict, computed
         parts.append("그룹 비교: " + " / ".join(summary_lines[:3]))  # 길이 제한 감안
 
     summary_context = "\n".join(parts)
+    questions_list = computed_metrics.get("questions_used", [])
+    questions_str = ", ".join(questions_list)
     prompt = f"""
-너는 전략 리포트 작성자다. 아래 컨텍스트와 사용자 질의 포커스를 참고해 명확한 인사이트를 만들어줘.
+    너는 전략 리포트 작성자다. 아래 컨텍스트와 사용자 질의 포커스를 참고해 명확한 인사이트를 만들어줘.
 
-사용자 질의 포커스: {spec.get('focus', '')}
+    사용자 질의 포커스: {spec.get('focus', '')}
 
-데이터 요약:
-{summary_context}
+    사용된 문항(컬럼): {questions_str}
 
-요청:
-1. 주요 관찰 패턴 2~3개를 기술해줘.
-2. 강점과 약점을 구체적인 항목명이나 세그먼트명을 숫자와 함께 설명해줘.
-3. 우선 개입/확장할만한 행동 제안 2개를 제시해줘.
-4. 전체 길이 500~1000자, 비즈니스 톤, 숫자는 한 자리 소수, '-' 사용.
+    데이터 요약:
+    {summary_context}
 
-출력만 텍스트로 해줘.
-"""
+    요청:
+    1. 주요 관찰 패턴 2~3개를 기술해줘.
+    2. 강점과 약점을 구체적으로 조합명이나 항목명을 쓰면서 숫자와 함께 설명해줘.
+    3. 우선 개입/확장할만한 행동 제안 2개를 제시해줘.
+    4. 전체 길이 500~1000자, 비즈니스 톤, 숫자는 한 자리 소수, '-' 사용.
+
+    출력만 텍스트로 해줘.
+    """
     explanation = call_gpt_for_insight(prompt)
     return explanation.replace("~", "-")
 
@@ -786,7 +824,8 @@ def handle_nl_question(df: pd.DataFrame, question: str):
         "deltas": deltas,
         "top_segments": top_segments
     }
-
+    questions_used = get_questions_used(spec, df, df_filtered)
+    computed_metrics["questions_used"] = questions_used
     # 그룹 비교 통계 (groupby가 있으면)
     extra_group_stats = None
     gb = spec.get("groupby")
@@ -795,6 +834,9 @@ def handle_nl_question(df: pd.DataFrame, question: str):
 
     # 설명 생성 (기존 호출을 아래로 교체)
     explanation = generate_explanation_from_spec(df_filtered, spec, computed_metrics, extra_group_stats=extra_group_stats)
+    if questions_used:
+        st.markdown("**참고한 문항(컬럼):** " + ", ".join(questions_used))
+
     render_insight_card("자연어 기반 설명", explanation, key="nlq-insight")
 
 
