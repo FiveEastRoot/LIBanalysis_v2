@@ -25,12 +25,12 @@ COLOR_CYCLER = cycle(DEFAULT_PALETTE)
 # 유틸리티
 # ─────────────────────────────────────────────────────
 
-def safe_chat_completion(*, model="gpt-4.1-nano", messages, temperature=0.2, max_tokens=300, retries=3, backoff_base=1.0):
+def safe_chat_completion(*, messages, temperature=0.2, max_tokens=300, retries=3, backoff_base=1.0):
     last_exc = None
     for attempt in range(1, retries + 1):
         try:
             resp = client.chat.completions.create(
-                model=model,
+                model= "gpt-4.1-nano",
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens
@@ -327,10 +327,10 @@ def extract_keyword_and_audience(responses, batch_size=20):
     return results
 
 
-def call_gpt_for_insight(prompt, model="gpt-4.1-nano", temperature=0.25, max_tokens=400):
+def call_gpt_for_insight(prompt, temperature=0.25, max_tokens=400):
     try:
         resp = client.chat.completions.create(
-            model=model,
+            model="gpt-4.1-nano",
             messages=[
                 {"role": "system", "content": "너는 전략 리포트 작성자이며, 주어진 데이터를 바탕으로 명확하고 간결한 인사이트를 제공해야 한다."},
                 {"role": "user", "content": prompt}
