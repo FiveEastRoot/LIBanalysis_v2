@@ -331,6 +331,22 @@ def extract_keyword_and_audience(responses, batch_size=20):
             results.append((row['response'], row['keywords'], row['audience']))
     return results
 
+def call_gpt_for_insight(prompt, model="gpt-4.1-nano", temperature=0.25, max_tokens=400):
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "너는 전략 리포트 작성자이며, 주어진 데이터를 바탕으로 명확하고 간결한 인사이트를 제공해야 한다."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        content = resp.choices[0].message.content.strip()
+        return content
+    except Exception as e:
+        logging.warning(f"GPT 호출 실패: {e}")
+        return f"GPT 해석 생성에 실패했습니다: {e}"
 
 def build_radar_prompt(overall_profile: dict, combos: list):
     # combos: list of dicts with keys: label (e.g. "여성 | 30~34세"), n, profile (dict of midcat->score)
