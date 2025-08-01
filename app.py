@@ -991,6 +991,55 @@ def apply_filters(df: pd.DataFrame, filters: list):
             dff = dff[dff[col].astype(str).str.contains(str(val), na=False)]
     return dff
 
+def parse_natural_language_query(question: str, model="gpt-4", system_prompt=None) -> dict:
+    """
+    자연어 질의를 GPT에 입력해 spec 구조로 변환
+
+    입력:
+        - question: 유저가 입력한 자연어 질문
+        - model: OpenAI 모델 (예: "gpt-4", "gpt-3.5-turbo")
+        - system_prompt: 역할 설정 프롬프트 (기본값 사용 가능)
+
+    반환:
+        - {"x": ..., "y": ..., "groupby": ..., "filters": ..., "focus": ..., "chart_type": ...}
+    """
+
+    import openai
+
+    if system_prompt is None:
+        system_prompt = (
+            "다음은 설문조사 데이터를 기반으로 시각화를 위한 요청입니다. "
+            "사용자가 입력한 자연어 질문을 기반으로 시각화 정보를 JSON 형태로 변환하세요. "
+            "JSON 스펙 예시는 다음과 같습니다:\n\n"
+            "{\n"
+            "  \"x\": \"SQ2\", \n"
+            "  \"y\": \"Q2-1. 정보 탐색 용이성\",\n"
+            "  \"groupby\": \"DQ2\",\n"
+            "  \"filters\": [{\"col\": \"DQ1\", \"op\": \"==\", \"val\": \"여\"}],\n"
+            "  \"focus\": \"연령별 만족도 비교\",\n"
+            "  \"chart_type\": \"grouped_bar\"\n"
+            "}\n\n"
+            "가능한 chart_type은 다음 중 하나입니다: 'grouped_bar', 'heatmap_segment', 'radar', 'line'."
+        )
+
+    try:
+        completion = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": question}
+            ],
+            temperature=0.2
+        )
+        content = completion.choices[0].message.content
+        spec = json.loads(content)
+        return spec
+
+    except Exception as e:
+        st.error(f"GPT 응답 파싱에 실패했습니다: {e}")
+        return {}
+
+
 def handle_nl_question(df: pd.DataFrame, question: str):
     st.subheader("💬 자연어 기반 분석")
 
