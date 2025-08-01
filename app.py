@@ -345,6 +345,83 @@ def midcategory_avg_table(df):
     tbl = tbl.sort_values(by="평균 점수(0~100)", ascending=False).reset_index(drop=True)
     return tbl
 
+import plotly.express as px
+
+def plot_grouped_bar(df, x_col, group_col):
+    """
+    그룹형 막대 그래프: x_col 기준으로 그룹화, group_col을 색상 그룹으로 분리
+    예: SQ2별 중분류 만족도 평균을 연령대 그룹별로 비교
+    """
+    if x_col not in df.columns or group_col not in df.columns:
+        return None, None
+
+    # 수치형 평균 계산
+    agg_df = df.groupby([x_col, group_col]).mean(numeric_only=True).reset_index()
+
+    # 대표 만족도 항목 선택
+    y_cols = [c for c in agg_df.columns if c.startswith("Q") or c.startswith("DQ") or c.startswith("SQ")]
+    if not y_cols:
+        return None, None
+
+    y = y_cols[0]  # 예시로 첫번째 수치형 컬럼 사용
+
+    fig = px.bar(
+        agg_df,
+        x=x_col,
+        y=y,
+        color=group_col,
+        barmode="group",
+        text_auto=".2s"
+    )
+
+    fig.update_layout(
+        title=f"{x_col}별 {group_col} 그룹 비교",
+        xaxis_title=x_col,
+        yaxis_title=f"{y} 평균",
+        height=450
+    )
+
+    return fig, agg_df
+
+def plot_heatmap_segment(df):
+    """
+    세그먼트 조합별 만족도 문항 평균 → 히트맵 시각화
+    - 컬럼명에 'Q' 포함된 항목 중 float형만 선택
+    - 행: 세그먼트 (예: 연령대+이용빈도)
+    - 열: 중분류 만족도 문항
+    """
+    seg_cols = [c for c in df.columns if any(s in c for s in ["SQ", "DQ"]) and df[c].dtype == "object"]
+    if not seg_cols:
+        return None, None
+
+    # 세그먼트 조합 생성
+    df["세그먼트"] = df[seg_cols].astype(str).agg(" / ".join, axis=1)
+
+    # 만족도 항목
+    likert_cols = [c for c in df.columns if c.startswith("Q") and df[c].dtype in ("int64", "float64")]
+    if not likert_cols:
+        return None, None
+
+    # 그룹별 평균
+    heat_df = df.groupby("세그먼트")[likert_cols].mean(numeric_only=True).round(1)
+
+    fig = go.Figure(data=go.Heatmap(
+        z=heat_df.values,
+        x=heat_df.columns,
+        y=heat_df.index,
+        colorscale="YlGnBu",
+        colorbar=dict(title="만족도")
+    ))
+
+    fig.update_layout(
+        title="세그먼트 조합별 만족도 히트맵",
+        xaxis_title="만족도 항목",
+        yaxis_title="세그먼트 조합",
+        height=500
+    )
+
+    return fig, heat_df
+
 def plot_midcategory_radar(df):
     mid_scores = compute_midcategory_scores(df)
     if mid_scores.empty:
