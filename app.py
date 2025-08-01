@@ -6,9 +6,8 @@ import plotly.graph_objects as go
 import plotly.express as px
 import re
 import openai
-import json 
+import streamlit.components.v1 as components 
 import math
-import streamlit.components.v1 as components
 import logging
 from itertools import cycle
 
@@ -167,7 +166,6 @@ def render_chart_and_table(bar, table, title, key_prefix=""):
 def show_table(df, caption):
     st.dataframe(df)
 
-import streamlit.components.v1 as components  # 파일 상단에 위치해야 함
 
 def render_insight_card(title: str, content: str, key: str = None):
     if content is None:
@@ -190,9 +188,12 @@ def render_insight_card(title: str, content: str, key: str = None):
         <div style="font-size:0.95em; line-height:1.4em;">{content_html}</div>
     </div>
     """
-    components.html(html, height=height, key=key)
-
-
+    try:
+        components.html(html, height=height, key=key)
+    except Exception as e:
+        logging.warning(f"components.html failed for key={key}: {e}")
+        # Fallback so the user still sees something
+        st.markdown(f"**{title}**\n\n{content}")
 
 # ─────────────────────────────────────────────────────
 # Likert / 중분류 점수 계산
