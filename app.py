@@ -385,8 +385,7 @@ def plot_midcategory_radar(df):
 # GPT 관련 헬퍼
 # ─────────────────────────────────────────────────────
 
-def get_questions_used(spec: dict, df: pd.DataFrame, df_filtered: pd.DataFrame):
-    used = set()
+
 
     # 명시된 x, y, groupby
     for key in ("x", "y", "groupby"):
@@ -887,6 +886,83 @@ def handle_nl_question(df: pd.DataFrame, question: str):
         st.warning("필터 적용 결과 데이터가 없습니다. 조건을 조정해보세요.")
         return
 
+    # 참고한 문항 추출
+    try:
+        questions_used_full, questions_used_codes = get_questions_used(spec, df, df_filtered)
+    except NameError:
+        questions_used_full, questions_used_codes = [], []
+
+    if questions_used_codes:
+        # 순서 유지 중복 제거
+        seen_codes = set()
+        unique_codes = [c for c in questions_used_codes if not (c in seen_codes or seen_codes.add(c))]
+        st.markdown("**참고한 문항 (문항번호만):** " + ", ".join(unique_codes))
+    if questions_used_full:
+        st.markdown("**참고한 전체 문항명:** " + ", ".join(questions_used_full))
+
+    # 중분류 지표
+    overall_mid_scores = compute_midcategory_scores(df_filtered)
+    overall_mid_dict = {k: float(v) for k, v in overall_mid_scores.items()} if not overall_mid_scores.empty else {}
+    global_mid_scores = compute_midcategory_scores(df)
+    deltas = {k: overall_mid_dict.get(k, 0) - float(global_mid_scores.get(k, overall_mid_dict.get(k, 0))) for k in overall_mid_dict}
+
+    # 상위 세그먼트
+    top_segments = []
+    gb = spec.get("groupby")
+    if gb and gb in df_filtered.columns:
+        counts = df_filtered[gb].astype(str).value_counts().nlargest(3)
+        for label, n in counts.items():
+            subset = df_filtered[df_filtered[gb].astype(str) == label]
+            profile = compute_midcategory_scores(subset)
+            top_segments.append({
+                "label": f"{gb}={label}",
+                "n": int(n),
+                "profile": {k: float(v) for k, v in profile.items()}
+            })
+    else:
+        top_segments.append({
+            "label": "필터된 전체",
+            "n": len(df_filtered),
+            "profile": overall_mid_dict
+        })
+
+    computed_metrics = {
+        "overall_mid_scores": overall_mid_dict,
+        "deltas": deltas,
+        "top_segments": top_segments,
+        "questions_used_full": questions_used_full,
+        "questions_used_codes": questions_used_codes
+    }
+
+    # 그룹 비교 통계
+    extra_group_stats = None
+    if gb and gb in df_filtered.columns:
+        extra_group_stats = compare_midcategory_by_group(df_filtered, gb)
+
+    # 차트 유형 결정
+    chart_type = infer_chart_type(spec, df_filtered)
+    chart = None
+    # (이하 기존 chart 생성 로직을 그대로 여기에 둡니다...)
+
+    if chart is not None:
+        st.plotly_chart(chart, use_container_width=True)
+    else:
+        st.info("생성할 차트가 없습니다.")
+
+    # 설명 생성 (한 번만)
+    explanation = generate_explanation_from_spec(df_filtered, spec, computed_metrics, extra_group_stats=extra_group_stats)
+    render_insight_card("자연어 기반 설명", explanation, key="nlq-insight")
+
+    st.markdown("## 자연어 질의 결과")
+    st.markdown(f"**질의:** {question}")
+
+    spec = parse_nl_query_to_spec(question)
+    df_filtered = apply_filters(df, spec.get("filters", []))
+
+    if df_filtered.empty:
+        st.warning("필터 적용 결과 데이터가 없습니다. 조건을 조정해보세요.")
+        return
+
     # 참고한 문항 추출 (이후 설명/프롬프트 컨텍스트와 UI용)
     try:
         questions_used_full, questions_used_codes = get_questions_used(spec, df, df_filtered)
@@ -1069,12 +1145,6 @@ def handle_nl_question(df: pd.DataFrame, question: str):
     st.markdown("## 자연어 질의 결과")
     st.markdown(f"**질의:** {question}")
 
-    spec = parse_nl_query_to_spec(question)
-    df_filtered = apply_filters(df, spec.get("filters", []))
-
-    if df_filtered.empty:
-        st.warning("필터 적용 결과 데이터가 없습니다. 조건을 조정해보세요.")
-        return
 
     # 중분류 관련 주요 지표
     overall_mid_scores = compute_midcategory_scores(df_filtered)
