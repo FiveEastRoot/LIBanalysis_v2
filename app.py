@@ -85,7 +85,7 @@ def extract_question_code(col_name: str) -> str:
 
 def expand_midcategory_to_columns(midcategory: str, df: pd.DataFrame):
     """
-    중분류 이름(예: '공간 및 이용편의성')을 받아 그에 해당하는 실제 컬럼명 목록으로 확장.
+    중분류 이름(예: '공간 및 이용편의성')을 받아 그에 해당하는 실제 컬럼명 목록로 확장.
     """
     for mid, predicate in MIDDLE_CATEGORY_MAPPING.items():
         if midcategory.strip().lower() == mid.strip().lower():
@@ -1053,7 +1053,10 @@ def handle_nl_question(df: pd.DataFrame, question: str):
         # 2. 질문 코드 추출
         questions_used_full, questions_used_codes = get_questions_used(spec, df, df_filtered)
 
-        # 3. 설명 생성
+        # 3. computed_metrics 생성
+        computed_metrics = compute_metrics_from_spec(df_filtered, spec)
+
+        # 4. 설명 생성
         explanation = generate_explanation_from_spec(spec, computed_metrics)
         render_insight_card("📘 자연어 기반 해석", explanation, key="explanation")
 
@@ -1203,12 +1206,12 @@ SEGMENT_OPTIONS = [
     {"label": "DQ4. (1순위)이용목적", "key": "DQ4"},
 ]
 MIDCAT_MAP = {
-    "공간 및 이용편의성": "Q1-",
-    "정보 획득 및 활용": "Q2-",
-    "소통 및 정책 활용": "Q3-",
-    "문화·교육 향유": "Q4-",
-    "사회적 관계 형성": "Q5-",
-    "개인의 삶과 역량": "Q6-",
+    "공간 및 이용편의성": "Q1",
+    "정보 획득 및 활용": "Q2",
+    "소통 및 정책 활용": "Q3",
+    "문화·교육 향유": "Q4",
+    "사회적 관계 형성": "Q5",
+    "개인의 삶과 역량": "Q6",
     "자치구 구성 문항": "Q9-D-3",
     "공익성 및 기여도": ["Q7-", "Q8-"],
 }
@@ -1488,13 +1491,18 @@ def plot_dq1(df):
     grp = cat.value_counts().reindex(order, fill_value=0)
     pct = (grp/grp.sum()*100).round(1)
 
-    fig = go.Figure(go.Bar(x=grp.index, y=grp.values, text=grp.values,
-                            textposition='outside', marker_color=get_qualitative_colors(1)[0]))
-    fig.update_layout(title=question, xaxis_title="이용 빈도 구간", yaxis_title="응답 수",
-                      bargap=0.2, height=450, margin=dict(t=30,b=50), xaxis_tickangle=-15)
+    fig = go.Figure(go.Bar(
+        x=grp.index, y=grp.values,
+        text=grp.values, textposition='outside',
+        marker_color=get_qualitative_colors(1)[0]
+    ))
+    fig.update_layout(
+        title=question, xaxis_title="이용 빈도 구간", yaxis_title="응답 수",
+        bargap=0.2, height=450, margin=dict(t=30,b=50), xaxis_tickangle=-15
+    )
 
-    tbl_df = pd.DataFrame({"응답 수":grp, "비율 (%)":pct}).T
-    return fig, tbl_df, question
+    table_df = pd.DataFrame({"응답 수":grp, "비율 (%)":pct}).T
+    return fig, table_df, question
 
 def plot_dq2(df):
     cols = [c for c in df.columns if c.startswith("DQ2")]
@@ -1506,7 +1514,7 @@ def plot_dq2(df):
         s = str(s).strip()
         m = re.match(r'^(\d+)\s*년\s*(\d+)\s*개월$', s)
         if m:
-            return int(m.group(1)) + (1 if int(m.group(2))>0 else 0)
+            return int(m.group(1)) + (1 if int(m.group(2)) > 0 else 0)
         m = re.match(r'^(\d+)\s*년$', s)
         if m:
             return int(m.group(1))
@@ -1750,6 +1758,17 @@ def page_short_keyword(df):
         df_result = process_answers(answers)
         show_short_answer_keyword_analysis(df_result)
 
+def compute_metrics_from_spec(df: pd.DataFrame, spec: dict) -> pd.DataFrame:
+    # 예시: groupby와 x가 있으면 group별 x의 평균, 아니면 전체 중분류 점수
+    if spec.get("groupby") and spec.get("x"):
+        group_col = spec["groupby"]
+        x_col = spec["x"]
+        if group_col in df.columns and x_col in df.columns:
+            return df.groupby(group_col)[x_col].mean().reset_index()
+    # fallback: 전체 중분류 점수
+    mids = compute_midcategory_scores(df)
+    return mids.reset_index().rename(columns={"index": "중분류", 0: "평균값"})
+
 CATEGORY_MAP = {
     "공간 및 이용편의성": "Q1",
     "정보 획득 및 활용": "Q2",
@@ -1929,10 +1948,10 @@ def page_segment_analysis(df):
     fig_radar.add_trace(go.Scatterpolar(
         r=overall_closed,
         theta=cats_closed,
-        fill=None,
+        fill='none',
         name="전체 평균",
-        line=dict(dash="dash", width=5, color="black"),
-        opacity=0.5
+        line=dict(dash='dash', width=2),
+        opacity=1
     ))
 
     colors = DEFAULT_PALETTE
@@ -1955,7 +1974,7 @@ def page_segment_analysis(df):
         title=f"상위 {min(top_n, len(top_df))}개 세그먼트 조합 중분류 만족도 프로파일 vs 전체 평균",
         height=500,
         showlegend=True,
-        legend=dict(orientation="v", y=0.85, x=1.02)
+        legend=dict(orientation="v", x=1.02, y=0.9)
     )
     st.plotly_chart(fig_radar, use_container_width=True)
 
@@ -2111,7 +2130,7 @@ def show_basic_strategy_insights(df):
             fig.add_trace(go.Scatterpolar(
                 r=overall_vals + [overall_vals[0]],
                 theta=midcats + [midcats[0]],
-                fill=None,
+                fill='none',
                 name="전체 평균",
                 line=dict(dash='dash', width=2),
                 opacity=1
@@ -2124,8 +2143,9 @@ def show_basic_strategy_insights(df):
                     continue
                 purpose_scores = compute_midcategory_scores(subset)
                 vals = [purpose_scores.get(m, overall_mid_scores.get(m, 0)) for m in midcats]
+                vals_closed = vals + [vals[0]]
                 fig.add_trace(go.Scatterpolar(
-                    r=vals + [vals[0]],
+                    r=vals_closed,
                     theta=midcats + [midcats[0]],
                     fill=None,
                     name=f"{purpose} (n={int(purpose_counts[purpose])})",
@@ -2136,7 +2156,7 @@ def show_basic_strategy_insights(df):
 
             fig.update_layout(
                 polar=dict(radialaxis=dict(range=[50, 100])),
-                title=f"상위 {len(top_purposes)}개 이용 목적별 중분류 만족도 vs 전체 평균",
+                title=f"상위 {min(top_n, len(top_df))}개 이용 목적별 중분류 만족도 vs 전체 평균",
                 height=450,
                 legend=dict(orientation="v", x=1.02, y=0.9)
             )
@@ -2311,7 +2331,7 @@ def show_basic_strategy_insights(df):
         rows = []
         for purpose in purpose_counts.index:
             subset = df[df[purpose_col].astype(str) == purpose]
-            if subset.empty:
+            if len(subset) < 5:
                 continue
             vals = pd.to_numeric(subset[time_sat_col], errors='coerce').dropna().astype(float)
             if vals.empty:
@@ -2337,206 +2357,3 @@ def show_basic_strategy_insights(df):
             st.dataframe(time_df)
         else:
             st.info("비교 가능한 이용목적별 운영시간 만족도 데이터가 충분하지 않습니다.")
-
-# ─────────────────────────────────────────────────────
-# 실행 엔트리
-# ─────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="공공도서관 설문 시각화 대시보드",
-    layout="wide"
-)
-
-mode = st.sidebar.radio("분석 모드", ["기본 분석", "심화 분석", "전략 인사이트(기본)", "자연어 질의"])
-
-uploaded = st.file_uploader("📂 엑셀(.xlsx) 파일 업로드", type=["xlsx"])
-if not uploaded:
-    st.info("데이터 파일을 업로드해 주세요.")
-    st.stop()
-
-try:
-    df = pd.read_excel(uploaded)
-    st.success("✅ 업로드 완료")
-except Exception as e:
-    st.error(f"파일 읽기 실패: {e}")
-    st.stop()
-
-if mode == "기본 분석":
-    tabs = st.tabs([
-        "👤 응답자 정보",
-        "📈 만족도 기본 시각화",
-        "🗺️ 자치구 구성 문항",
-        "📊 도서관 이용양태 분석",
-        "🖼️ 도서관 이미지 분석",
-        "🏋️ 도서관 강약점 분석",
-    ])
-
-    with tabs[0]:
-        page_home(df)
-
-    with tabs[1]:
-        page_basic_vis(df)
-
-    with tabs[2]:
-        st.header("🗺️ 자치구 구성 문항 분석")
-        sub_tabs = st.tabs([
-            "7점 척도 시각화",
-            "단문 응답 분석",
-            "장문 서술형 분석"
-        ])
-        with sub_tabs[0]:
-            st.subheader("자치구 구성 문항 (7점 척도)")
-            subregion_cols = [c for c in df.columns if "Q9-D-" in c]
-            if not subregion_cols:
-                st.error("Q9-D- 로 시작하는 문항을 찾을 수 없습니다.")
-            else:
-                for idx, col in enumerate(subregion_cols):
-                    bar, tbl = plot_stacked_bar_with_table(df, col)
-                    st.markdown(f"##### {col}")
-                    render_chart_and_table(bar, tbl, col, key_prefix=f"subregion-{idx}")
-        with sub_tabs[1]:
-            page_short_keyword(df)
-        with sub_tabs[2]:
-            st.subheader("장문 서술형 분석 (Q9-DS-5)")
-            long_cols = [c for c in df.columns if "Q9-DS-5" in c]
-            if not long_cols:
-                st.warning("Q9-DS-5 관련 문항을 찾을 수 없습니다.")
-            else:
-                answers = df[long_cols[0]].dropna().astype(str).tolist()
-                df_long = process_answers(answers)
-                show_short_answer_keyword_analysis(df_long)
-
-    with tabs[3]:
-        st.header("📊 도서관 이용양태 분석")
-        sub_tabs = st.tabs(["DQ1~5", "DQ6 계열"])
-        with sub_tabs[0]:
-            fig1, tbl1, q1 = plot_dq1(df)
-            render_chart_and_table(fig1, tbl1, q1, key_prefix="dq1")
-
-            fig2, tbl2, q2 = plot_dq2(df)
-            render_chart_and_table(fig2, tbl2, q2, key_prefix="dq2")
-
-            fig3, tbl3, q3 = plot_dq3(df)
-            render_chart_and_table(fig3, tbl3, q3, key_prefix="dq3")
-
-            fig4, tbl4, q4 = plot_dq4_bar(df)
-            render_chart_and_table(fig4, tbl4, q4, key_prefix="dq4")
-
-            fig5, tbl5, q5 = plot_dq5(df)
-            render_chart_and_table(fig5, tbl5, q5, key_prefix="dq5")
-        with sub_tabs[1]:
-            st.subheader("DQ6 계열 문항 분석")
-            dq6_cols = [c for c in df.columns if c.startswith("DQ6")]
-            if not dq6_cols:
-                st.warning("DQ6 계열 문항이 없습니다.")
-            else:
-                for col in dq6_cols:
-                    st.markdown(f"### {col}")
-                    if col == dq6_cols[0]:
-                        multi = df[col].dropna().astype(str).str.split(',')
-                        exploded = multi.explode().str.strip()
-                        counts = exploded.value_counts()
-                        percent = (counts / counts.sum() * 100).round(1)
-
-                        fig = go.Figure(go.Bar(
-                            x=counts.values, y=counts.index,
-                            orientation='h', text=counts.values,
-                            textposition='outside', marker_color=get_qualitative_colors(len(counts))
-                        ))
-                        fig.update_layout(
-                            title=col,
-                            xaxis_title="응답 수",
-                            yaxis_title="서비스",
-                            height=400,
-                            margin=dict(t=50, b=100)
-                        )
-                        table_df = pd.DataFrame({
-                            '응답 수': counts,
-                            '비율 (%)': percent
-                        }).T
-                        render_chart_and_table(fig, table_df, col, key_prefix="dq6")
-                    else:
-                        bar, tbl = plot_categorical_stacked_bar(df, col)
-                        render_chart_and_table(bar, tbl, col, key_prefix="dq6")
-
-    with tabs[4]:
-        st.header("🖼️ 도서관 이미지 분석")
-        fig, tbl = plot_likert_diverging(df, prefix="DQ7-E")
-        if fig is not None:
-            render_chart_and_table(fig, tbl, "DQ7-E 이미지 분포", key_prefix="image-diverge")
-        else:
-            st.warning("DQ7-E 문항이 없습니다.")
-
-    with tabs[5]:
-        st.header("🏋️ 도서관 강약점 분석")
-        fig8, tbl8, q8 = plot_pair_bar(df, "DQ8")
-        if fig8 is not None:
-            render_chart_and_table(fig8, tbl8, q8, key_prefix="strength")
-        else:
-            st.warning("DQ8 문항이 없습니다.")
-        fig9, tbl9, q9 = plot_pair_bar(df, "DQ9")
-        if fig9 is not None:
-            render_chart_and_table(fig9, tbl9, q9, key_prefix="weakness")
-        else:
-            st.warning("DQ9 문항이 없습니다.")
-
-elif mode == "심화 분석":
-    tabs = st.tabs(["공통 심화 분석(전체)", "공통 심화 분석(영역)", "이용자 세그먼트 조합 분석"])
-    with tabs[0]:
-        st.header("🔍 공통 심화 분석(전체)")
-        st.subheader("중분류별 전체 만족도 (레이더 차트 및 평균값)")
-        radar = plot_midcategory_radar(df)
-        if radar is not None:
-            st.plotly_chart(radar, use_container_width=True)
-            tbl_avg = midcategory_avg_table(df)
-            if not tbl_avg.empty:
-                show_table(tbl_avg, "중분류별 평균 점수")
-                st.markdown("---")
-            else:
-                st.warning("중분류 평균을 계산할 수 없습니다.")
-        else:
-            st.warning("필요한 문항이 없어 중분류 점수를 계산할 수 없습니다.")
-
-        st.subheader("중분류 내 문항별 편차")
-        mid_scores = compute_midcategory_scores(df)
-        if mid_scores.empty:
-            st.warning("중분류 문항이 없어 편차를 계산할 수 없습니다.")
-        else:
-            for mid in mid_scores.index:
-                fig, table_df = plot_within_category_bar(df, mid)
-                if fig is None:
-                    continue
-                st.markdown(f"### {mid}")
-                st.plotly_chart(fig, use_container_width=True)
-                if table_df is not None:
-                    show_table(
-                        table_df.reset_index().rename(columns={"index": "문항"}),
-                        f"{mid} 항목별 편차"
-                    )
-                    st.markdown("---")
-    with tabs[1]:
-        st.header("🔍 공통 심화 분석(영역별 A/B/C 비교)")
-        df_mean = get_abc_category_means(df)
-        radar_fig = plot_abc_radar(df_mean)
-        bar_fig = plot_abc_grouped_bar(df_mean)
-
-        st.subheader("중분류별 서비스 평가/효과/만족도 (A/B/C) 레이더 차트")
-        st.plotly_chart(radar_fig, use_container_width=True)
-
-        st.subheader("중분류별 서비스 평가/효과/만족도 (A/B/C) 묶음(bar) 차트")
-        st.plotly_chart(bar_fig, use_container_width=True)
-
-        st.markdown("#### 상세 데이터")
-        st.dataframe(df_mean)
-    with tabs[2]:
-        page_segment_analysis(df)
-        
-
-elif mode == "전략 인사이트(기본)":
-    st.header("🧠 전략 인사이트 (기본)")
-    show_basic_strategy_insights(df)
-elif mode == "자연어 질의":
-    st.header("🗣️ 자연어 질문 기반 자동 분석")
-    st.markdown("예시: '혼자 이용하는 사람들의 연령대 분포 보여주고 주로 가는 도서관별 중분류 만족도 강점/약점 비교해줘.'")
-    question = st.text_input("자연어 질문을 입력하세요", placeholder="예: 혼자 이용자들의 주 이용 도서관별 만족도 비교하고 강점 약점 알려줘")
-    if question:
-        handle_nl_question(df, question)
