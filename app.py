@@ -1187,7 +1187,8 @@ def page_segment_analysis(df):
         fill=None,
         name="전체 평균",
         line=dict(dash="dash", width=2),
-        opacity=0.8
+        opacity=1
+        
     ))
 
     colors = px.colors.qualitative.Plotly
@@ -1198,11 +1199,11 @@ def page_segment_analysis(df):
         fig_radar.add_trace(go.Scatterpolar(
             r=vals_closed,
             theta=cats_closed,
-            fill='toself',
+            fill=None,
             name=f"{combo_label} (n={int(row['응답자수'])})",
             hovertemplate="%{theta}: %{r:.1f}<extra></extra>",
             marker=dict(color=colors[i % len(colors)]),
-            opacity=0.5
+            opacity=0.9
         ))
 
     fig_radar.update_layout(
