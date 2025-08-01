@@ -112,8 +112,19 @@ def map_keyword_to_category(keyword):
             return cat
     return "해당없음"
 
-def escape_tildes(text: str) -> str:
-    return text.replace("~", "&#126;")
+def escape_tildes(text: str, mode: str = "html") -> str:
+    """
+    mode="html": 카드처럼 HTML로 렌더링할 때 물결표 처리.
+    mode="markdown": st.markdown 같은 마크다운 컨텍스트에서 취소선 방지.
+    """
+    if mode == "html":
+        # '~~' 먼저 바꾸고 단일 ~도 엔티티로
+        text = text.replace("~~", "&#126;&#126;")
+        return text.replace("~", "&#126;")
+    else:  # markdown
+        text = text.replace("~~", r"\~\~")
+        return text.replace("~", r"\~")
+
 
 # ─────────────────────────────────────────────────────
 # DataFrame & visualization helpers
@@ -1340,7 +1351,7 @@ def page_segment_analysis(df):
         combos.append({"label": combo_label, "n": int(row["응답자수"]), "profile": profile})
     prompt = build_radar_prompt(overall_profile_dict, combos)
     insight_text = call_gpt_for_insight(prompt)
-    st.markdown(insight_text)
+    st.markdown(escape_tildes(insight_text, mode="markdown").replace("\n", "  \n"))
 
     overall_means = group_means[midcats].mean(axis=0)
     for mc in midcats:
@@ -1385,8 +1396,7 @@ def page_segment_analysis(df):
     st.markdown("#### GPT 생성형 해석 (히트맵)")
     prompt_heat = build_heatmap_prompt(heatmap_table[[*segment_cols_filtered, *midcats, "응답자수"]].rename(columns={"응답자수": "응답자수"}), midcats)
     heat_insight = call_gpt_for_insight(prompt_heat)
-    st.markdown(heat_insight)
-
+    st.markdown(escape_tildes(heat_insight, mode="markdown").replace("\n", "  \n"))
 
 #델타 히트맵
 
@@ -1420,7 +1430,8 @@ def page_segment_analysis(df):
     delta_df_for_prompt = group_means.set_index("조합")
     prompt_delta = build_delta_prompt(delta_df_for_prompt, midcats)
     delta_insight = call_gpt_for_insight(prompt_delta)
-    st.markdown(delta_insight)
+    st.markdown(escape_tildes(delta_insight, mode="markdown").replace("\n", "  \n"))
+
 
 #신뢰구간 포함 편차 바 차트 해석
 
@@ -1461,7 +1472,7 @@ def page_segment_analysis(df):
         st.markdown("#### GPT 생성형 해석 (신뢰구간)")
         prompt_ci = build_ci_prompt(subset_local, mc)
         ci_insight = call_gpt_for_insight(prompt_ci)
-        st.markdown(ci_insight)
+        st.markdown(escape_tildes(ci_insight, mode="markdown").replace("\n", "  \n"))
 
 
 def show_basic_strategy_insights(df):
