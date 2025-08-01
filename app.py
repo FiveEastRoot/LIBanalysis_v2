@@ -28,7 +28,7 @@ COLOR_CYCLER = cycle(DEFAULT_PALETTE)
 # 유틸리티
 # ─────────────────────────────────────────────────────
 
-def safe_chat_completion(*, model="gpt-4.1-", messages, temperature=0.2, max_tokens=300, retries=3, backoff_base=1.0):
+def safe_chat_completion(*, model="gpt-4.1-mini", messages, temperature=0.2, max_tokens=300, retries=3, backoff_base=1.0):
     last_exc = None
     for attempt in range(1, retries + 1):
         try:
