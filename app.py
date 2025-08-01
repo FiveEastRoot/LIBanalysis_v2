@@ -1833,7 +1833,6 @@ def page_segment_analysis(df):
                 delta_summary_parts.append(f"{mc}에서 가장 높은 편차: {top_pos.iloc[0]['조합']} (+{top_pos.iloc[0][col_delta]:.1f})")
             if not top_neg.empty:
                 delta_summary_parts.append(f"{mc}에서 가장 낮은 편차: {top_neg.iloc[0]['조합']} ({top_neg.iloc[0][col_delta]:.1f})")
-    st.text("；".join(delta_summary_parts) if delta_summary_parts else "의미 있는 편차를 발견하지 못했습니다.")
 
     delta_df_for_prompt = group_means.set_index("조합")
     prompt_delta = build_delta_prompt(delta_df_for_prompt, midcats)
