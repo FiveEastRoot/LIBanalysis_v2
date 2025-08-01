@@ -18,8 +18,7 @@ from itertools import cycle
 # 로깅 설정 (필요시 파일로도 남기게 조정 가능)
 logging.basicConfig(level=logging.INFO)
 
-openai.api_key = st.secrets["openai"]["api_key"]git add .gitignore requirements.txt
-
+openai.api_key = st.secrets["openai"]["api_key"]
 client = openai.OpenAI(api_key=openai.api_key)
 
 # 기본 색상 팔레트
