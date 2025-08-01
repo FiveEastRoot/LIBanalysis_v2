@@ -6,9 +6,12 @@ import plotly.graph_objects as go
 import plotly.express as px
 import re
 import openai
+import json 
 import math
 import logging
 from itertools import cycle
+
+
 
 # 로깅 설정 (필요시 파일로도 남기게 조정 가능)
 logging.basicConfig(level=logging.INFO)
@@ -24,7 +27,7 @@ COLOR_CYCLER = cycle(DEFAULT_PALETTE)
 # 유틸리티
 # ─────────────────────────────────────────────────────
 
-def safe_chat_completion(*, model="gpt-3.5-turbo", messages, temperature=0.2, max_tokens=300, retries=3, backoff_base=1.0):
+def safe_chat_completion(*, model="gpt-4.1-nano", messages, temperature=0.2, max_tokens=300, retries=3, backoff_base=1.0):
     last_exc = None
     for attempt in range(1, retries + 1):
         try:
@@ -41,6 +44,24 @@ def safe_chat_completion(*, model="gpt-3.5-turbo", messages, temperature=0.2, ma
             time.sleep(backoff_base * (2 ** (attempt - 1)))
     logging.error("OpenAI call failed after retries")
     raise last_exc
+
+def interpret_midcategory_scores(df):
+    scores = compute_midcategory_scores(df)
+    if scores.empty:
+        return "중분류 점수를 계산할 충분한 데이터가 없습니다."
+    overall = scores.mean()
+    high = scores[scores >= overall + 5].index.tolist()
+    low = scores[scores <= overall - 5].index.tolist()
+
+    parts = []
+    parts.append(f"전체 중분류 평균은 {overall:.1f}점입니다.")
+    if high:
+        parts.append(f"평균보다 높은 중분류: {', '.join(high)}.")
+    if low:
+        parts.append(f"평균보다 낮은 중분류: {', '.join(low)}.")
+    if not high and not low:
+        parts.append("모든 중분류가 전체 평균 수준과 비슷합니다.")
+    return " ".join(parts)
 
 # ─────────────────────────────────────────────────────
 # 전처리/매핑 유틸
@@ -272,7 +293,7 @@ def extract_keyword_and_audience(responses, batch_size=20):
 """
         try:
             resp = safe_chat_completion(
-                model="gpt-3.5-turbo",
+                model="gpt-4.1-nano",
                 messages=[{"role": "system", "content": prompt}],
                 temperature=0.2,
                 max_tokens=300
@@ -306,6 +327,145 @@ def extract_keyword_and_audience(responses, batch_size=20):
         for _, row in data.iterrows():
             results.append((row['response'], row['keywords'], row['audience']))
     return results
+
+
+def call_gpt_for_insight(prompt, model="gpt-4.1-nano", temperature=0.25, max_tokens=400):
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "너는 전략 리포트 작성자이며, 주어진 데이터를 바탕으로 명확하고 간결한 인사이트를 제공해야 한다."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        content = resp.choices[0].message.content.strip()
+        return content
+    except Exception as e:
+        logging.warning(f"GPT 호출 실패: {e}")
+        return f"GPT 해석 생성에 실패했습니다: {e}"
+
+def build_radar_prompt(overall_profile: dict, combos: list):
+    # combos: list of dicts with keys: label, n, profile (dict of midcat->score)
+    overall_str = ", ".join(f"{k}: {v:.1f}" for k, v in overall_profile.items())
+    combo_lines = []
+    for c in combos:
+        prof = ", ".join(f"{k}: {v:.1f}" for k, v in c["profile"].items())
+        combo_lines.append(f"{c['label']} (n={c['n']}): {prof}")
+    combo_str = "\n".join(combo_lines)
+    prompt = f"""
+너는 전략 보고서 작성자다. 다음 데이터를 보고 '레이더 차트 해석' 섹션을 만들어줘.
+
+입력:
+- 전체 평균 중분류 만족도: {overall_str}
+- 상위 세그먼트 조합별 중분류 만족도 프로파일:
+{combo_str}
+
+요청:
+1. 전체 평균과 비교해 각 조합이 어디서 강점/약점이 있는지 조합별로 2~3문장씩 요약.
+2. 조합들 간에 뚜렷히 대비되는 프로파일 쌍 2개를 골라 비교 설명.
+3. 전체적으로 관찰되는 유형(예: A계열은 정보에 강하지만 소통이 약한 패턴 등)을 3개 도출.
+4. 전략적 시사점 3개: 어떤 프로파일을 우선 공략하거나 보완해야 하는지.
+
+스타일: 비즈니스 보고서 톤, 소제목 포함, 숫자 한 자리 소수로, 각 조합 이름과 n 명시.
+"""
+    return prompt.strip()
+
+def build_heatmap_prompt(table_df: pd.DataFrame, midcats: list):
+    # table_df: columns include segment label (index "조합"), 응답자수, midcat scores
+    rows = []
+    for _, r in table_df.iterrows():
+        label = r.get("조합", "")
+        n = int(r.get("응답자수", 0))
+        scores = ", ".join(f"{mc}: {r.get(mc, 0):.1f}" for mc in midcats)
+        rows.append(f"{label} (n={n}): {scores}")
+    table_str = "\n".join(rows)
+    prompt = f"""
+너는 전략 보고서 작성자다. 아래 히트맵용 데이터를 보고 인사이트를 서술해줘.
+
+입력:
+- 세그먼트 조합별 중분류별 평균 만족도:
+{table_str}
+
+요청:
+1. 높은 점수/낮은 점수가 몰려있는 패턴(군집)을 정리해줘.
+2. 응답자 수가 충분한 조합에서 일관된 강점과 약점을 요약해줘.
+3. 전체적인 중분류별 경향—어떤 중분류가 전체적으로 높은지 낮은지 설명.
+4. 짧은 요약 개요와, 도출할 수 있는 3개의 행동 권장점 제시.
+
+스타일: 비즈니스 리포트 톤, 숫자 한 자리 소수, 소제목 포함.
+"""
+    return prompt.strip()
+
+def build_delta_prompt(delta_df: pd.DataFrame, midcats: list):
+    rows = []
+    for _, r in delta_df.iterrows():
+        combo = r.name  # index is 조합
+        diffs = ", ".join(f"{mc}: {r.get(f'{mc}_delta', 0):+.1f}" for mc in midcats)
+        rows.append(f"{combo}: {diffs}")
+    table_str = "\n".join(rows)
+    prompt = f"""
+너는 전략 보고서 작성자다. 아래 데이터는 세그먼트 조합별 중분류 만족도가 전체 평균 대비 얼마나 벗어나는지(Delta) 보여준다.
+
+입력:
+{table_str}
+
+요청:
+1. 평균 대비 가장 과도하게 높은/낮은 중분류들을 조합별로 설명해줘.
+2. 여러 조합이 반복해서 비슷한 편차 패턴을 보이는지 식별해줘.
+3. 개선/확장 우선순위를 추천해줘 (예: 평균보다 낮고 빈번한 편차 → 개선, 평균보다 높은 영역 중 확장 가능성 등).
+
+스타일: 간결한 비즈니스 요약, 소제목 포함, 숫자 한 자리 소수.
+"""
+    return prompt.strip()
+
+def build_ci_prompt(subset_df: pd.DataFrame, mc: str):
+    # subset_df: contains columns '조합', 'delta', 'se' for given midcategory
+    rows = []
+    for _, r in subset_df.iterrows():
+        combo = r.get("조합", "")
+        delta = r.get("delta", 0)
+        se = r.get("se", 0)
+        rows.append(f"{combo}: 편차 {delta:.1f}, 표준오차 {se:.2f}")
+    table_str = "\n".join(rows)
+    prompt = f"""
+너는 전략 보고서 작성자다. 아래 데이터는 특정 중분류({mc})에서 상위 세그먼트 조합들이 전체 평균 대비 편차와 그 불확실성(표준오차)을 나타낸다.
+
+입력:
+{table_str}
+
+요청:
+1. 어떤 조합의 편차가 실질적으로 의미 있어 보이는지(0 기준선과 비교) 설명해줘.
+2. 편차가 크지만 불확실성이 큰 경우 vs 작지만 안정적인 경우를 구분해줘.
+3. 우선 개입하거나 주목해야 할 조합/중분류 조합 3개를 제안해줘.
+
+스타일: 비즈니스 리포트 톤, 숫자 한 자리 소수, 소제목 포함.
+"""
+    return prompt.strip()
+
+def build_small_multiple_prompt(top_df: pd.DataFrame, midcat: str, segment_cols_filtered: list):
+    # top_df has rows with segments and the midcat scores
+    rows = []
+    for _, r in top_df.iterrows():
+        combo = " | ".join(str(r[c]) for c in segment_cols_filtered)
+        score = r.get(midcat, None)
+        rows.append(f"{combo}: {midcat} 점수 {score:.1f}" if pd.notna(score) else f"{combo}: 데이터 없음")
+    table_str = "\n".join(rows)
+    prompt = f"""
+너는 전략 보고서 작성자다. 아래 데이터는 중분류 '{midcat}'에 대해 상위 세그먼트 조합들의 점수를 비교한 것이다.
+
+입력:
+{table_str}
+
+요청:
+1. 이 중분류에서 조합 간 분포와 순위 변동성을 요약해줘.
+2. 이 중분류에서 특징적인 outlier(탁월하거나 취약한 조합)를 지적해줘.
+3. 일관성 있는 강점/약점을 보이는 조합 그룹이 있다면 묶어서 설명해줘.
+
+스타일: 짧고 명확한 비즈니스 요약, 소제목 포함, 숫자 한 자리 소수.
+"""
+    return prompt.strip()
 
 # ─────────────────────────────────────────────────────
 # 세그먼트 파생/매핑
@@ -1136,6 +1296,7 @@ def page_segment_analysis(df):
         opacity=0.5
     ))
 
+
     colors = DEFAULT_PALETTE
     for i, (_, row) in enumerate(top_df.iterrows()):
         combo_label = " | ".join([str(row[c]) for c in segment_cols_filtered])
@@ -1159,6 +1320,24 @@ def page_segment_analysis(df):
         legend=dict(orientation="v", y=0.85, x=1.02)
     )
     st.plotly_chart(fig_radar, use_container_width=True)
+    # 룰 기반 요약
+    st.markdown("#### 룰 기반 요약")
+    # 전체 평균 프로파일
+    overall_profile_dict = {mc: overall_profile.get(mc, 0) for mc in midcats}
+    high_low_summary = interpret_midcategory_scores(df) if 'interpret_midcategory_scores' in globals() else ""
+    st.write(high_low_summary)
+
+    # GPT 기반 해석
+    st.markdown("#### GPT 생성형 해석")
+    # 조합 데이터 직렬화
+    combos = []
+    for _, row in top_df.iterrows():
+        combo_label = " | ".join([str(row[c]) for c in segment_cols_filtered])
+        profile = {mc: row.get(mc, overall_profile.get(mc, overall_profile.mean())) for mc in midcats}
+        combos.append({"label": combo_label, "n": int(row["응답자수"]), "profile": profile})
+    prompt = build_radar_prompt(overall_profile_dict, combos)
+    insight_text = call_gpt_for_insight(prompt)
+    st.markdown(insight_text)
 
     overall_means = group_means[midcats].mean(axis=0)
     for mc in midcats:
@@ -1167,6 +1346,8 @@ def page_segment_analysis(df):
     rank_df = group_means[[mc for mc in midcats]].rank(ascending=False, axis=1)
     rank_change = rank_df.subtract(ref_rank, axis=1)
     group_means["조합"] = group_means.apply(lambda r: " | ".join([str(r[c]) for c in segment_cols_filtered]), axis=1)
+
+#히트맵
 
     st.markdown("### 히트맵 + 전체 평균 대비 중분류별 편차 히트맵")
     heatmap_plot = group_means.set_index("조합")[midcats]
@@ -1180,6 +1361,20 @@ def page_segment_analysis(df):
     )
     st.plotly_chart(fig_abs, use_container_width=True)
 
+    st.markdown("#### 히트맵 룰 기반 요약")
+    # 중분류별 평균 테이블 준비 (index가 조합, 포함된 midcats)
+    heatmap_table = group_means.copy()
+    # '조합' 컬럼이 생성되어 있으므로 그대로 사용
+    st.write("**전체 평균 대비 중분류 평균 프로파일**")
+    # GPT 해석
+    st.markdown("#### GPT 생성형 해석 (히트맵)")
+    prompt_heat = build_heatmap_prompt(heatmap_table[[*segment_cols_filtered, *midcats, "응답자수"]].rename(columns={"응답자수": "응답자수"}), midcats)
+    heat_insight = call_gpt_for_insight(prompt_heat)
+    st.markdown(heat_insight)
+
+
+#델타 히트맵
+
     delta_plot = group_means.set_index("조합")[[f"{mc}_delta" for mc in midcats]]
     delta_plot.columns = midcats
     fig_delta = px.imshow(
@@ -1191,6 +1386,28 @@ def page_segment_analysis(df):
         labels=dict(x="중분류", y="세그먼트 조합", color="편차")
     )
     st.plotly_chart(fig_delta, use_container_width=True)
+
+    st.markdown("#### Delta 히트맵 룰 기반 요약")
+    # 룰 기반: 평균 대비 가장 큰 플러스/마이너스 조합 추출
+    delta_summary_parts = []
+    for mc in midcats:
+        col_delta = f"{mc}_delta"
+        if col_delta in group_means:
+            top_pos = group_means.nlargest(1, col_delta)
+            top_neg = group_means.nsmallest(1, col_delta)
+            if not top_pos.empty:
+                delta_summary_parts.append(f"{mc}에서 가장 높은 편차: {top_pos.iloc[0]['조합']} (+{top_pos.iloc[0][col_delta]:.1f})")
+            if not top_neg.empty:
+                delta_summary_parts.append(f"{mc}에서 가장 낮은 편차: {top_neg.iloc[0]['조합']} ({top_neg.iloc[0][col_delta]:.1f})")
+    st.write("；".join(delta_summary_parts) if delta_summary_parts else "의미 있는 편차를 발견하지 못했습니다.")
+
+    st.markdown("#### GPT 생성형 해석 (Delta)")
+    delta_df_for_prompt = group_means.set_index("조합")
+    prompt_delta = build_delta_prompt(delta_df_for_prompt, midcats)
+    delta_insight = call_gpt_for_insight(prompt_delta)
+    st.markdown(delta_insight)
+
+#신뢰구간 포함 편차 바 차트 해석
 
     st.markdown("### 전체 평균 대비 편차와 간이 신뢰구간 (중분류별)")
     for mc in midcats[:2]:
@@ -1212,6 +1429,25 @@ def page_segment_analysis(df):
             margin=dict(t=40, b=60)
         )
         st.plotly_chart(fig_ci, use_container_width=True)
+        st.markdown(f"#### '{mc}' 편차 신뢰도 해석")
+        # 룰 기반: 0을 벗어나는지 체크
+        ci_summary = []
+        subset_local = subset  # 기존 변수
+        for _, r in subset_local.iterrows():
+            combo = r["조합"]
+            delta = r["delta"]
+            se = r["se"]
+            ci_lower = delta - se
+            ci_upper = delta + se
+            signif = "유의미" if not (ci_lower <= 0 <= ci_upper) else "불확실"
+            ci_summary.append(f"{combo}: 편차 {delta:.1f}, SE {se:.2f} ({signif})")
+        st.write("；".join(ci_summary))
+
+        st.markdown("#### GPT 생성형 해석 (신뢰구간)")
+        prompt_ci = build_ci_prompt(subset_local, mc)
+        ci_insight = call_gpt_for_insight(prompt_ci)
+        st.markdown(ci_insight)
+
 
     st.markdown("### Small Multiples: 중분류별 세그먼트 조합 비교 (상위 10개)")
     top3 = group_means.nlargest(10, "응답자수").copy()
@@ -1227,6 +1463,24 @@ def page_segment_analysis(df):
         )
         fig_small.update_traces(texttemplate='%{text:.1f}', textposition='outside')
         st.plotly_chart(fig_small, use_container_width=True)
+        st.markdown(f"#### '{mc}' Small Multiples 룰 기반 요약")
+        # 간단한 분산/순위 설명
+        vals = top3[mc].dropna()
+        if not vals.empty:
+            range_span = vals.max() - vals.min()
+            st.write(f"{mc} 점수 범위: {vals.min():.1f} ~ {vals.max():.1f} (범위 {range_span:.1f}).")
+            # outlier: 상위/하위 하나씩
+            highest = top3.nlargest(1, mc)
+            lowest = top3.nsmallest(1, mc)
+            st.write(f"가장 높은 조합: {' | '.join(str(highest.iloc[0][c]) for c in segment_cols_filtered)} ({highest.iloc[0][mc]:.1f}); 가장 낮은 조합: {' | '.join(str(lowest.iloc[0][c]) for c in segment_cols_filtered)} ({lowest.iloc[0][mc]:.1f}).")
+        else:
+            st.write("데이터가 충분하지 않습니다.")
+
+        st.markdown(f"#### GPT 생성형 해석 (Small Multiples - {mc})")
+        prompt_small = build_small_multiple_prompt(top3, mc, segment_cols_filtered)
+        small_insight = call_gpt_for_insight(prompt_small)
+        st.markdown(small_insight)
+
 
     st.markdown("#### 세그먼트 조합별 중분류별 만족도 및 응답자수")
     st.dataframe(table_with_stats, use_container_width=True)
@@ -1681,6 +1935,7 @@ elif mode == "심화 분석":
         st.dataframe(df_mean)
     with tabs[2]:
         page_segment_analysis(df)
+        
 
 elif mode == "전략 인사이트(기본)":
     st.header("🧠 전략 인사이트 (기본)")
