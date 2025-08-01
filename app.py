@@ -745,22 +745,26 @@ def generate_explanation_from_spec(df_subset: pd.DataFrame, spec: dict, computed
         parts.append("그룹 비교: " + " / ".join(summary_lines[:3]))  # 길이 제한 감안
 
     summary_context = "\n".join(parts)
+    questions_list = computed_metrics.get("questions_used", [])
+    questions_str = ", ".join(questions_list)
     prompt = f"""
-너는 전략 리포트 작성자다. 아래 컨텍스트와 사용자 질의 포커스를 참고해 명확한 인사이트를 만들어줘.
+    너는 전략 리포트 작성자다. 아래 컨텍스트와 사용자 질의 포커스를 참고해 명확한 인사이트를 만들어줘.
 
-사용자 질의 포커스: {spec.get('focus', '')}
+    사용자 질의 포커스: {spec.get('focus', '')}
 
-데이터 요약:
-{summary_context}
+    사용된 문항(컬럼): {questions_str}
 
-요청:
-1. 주요 관찰 패턴 2~3개를 기술해줘.
-2. 강점과 약점을 구체적인 항목명이나 세그먼트명을 숫자와 함께 설명해줘.
-3. 우선 개입/확장할만한 행동 제안 2개를 제시해줘.
-4. 전체 길이 500~1000자, 비즈니스 톤, 숫자는 한 자리 소수, '-' 사용.
+    데이터 요약:
+    {summary_context}
 
-출력만 텍스트로 해줘.
-"""
+    요청:
+    1. 주요 관찰 패턴 2~3개를 기술해줘.
+    2. 강점과 약점을 구체적으로 조합명이나 항목명을 쓰면서 숫자와 함께 설명해줘.
+    3. 우선 개입/확장할만한 행동 제안 2개를 제시해줘.
+    4. 전체 길이 500~1000자, 비즈니스 톤, 숫자는 한 자리 소수, '-' 사용.
+
+    출력만 텍스트로 해줘.
+    """
     explanation = call_gpt_for_insight(prompt)
     return explanation.replace("~", "-")
 
@@ -831,7 +835,7 @@ def handle_nl_question(df: pd.DataFrame, question: str):
     # 설명 생성 (기존 호출을 아래로 교체)
     explanation = generate_explanation_from_spec(df_filtered, spec, computed_metrics, extra_group_stats=extra_group_stats)
     if questions_used:
-    st.markdown("**참고한 문항(컬럼):** " + ", ".join(questions_used))
+        st.markdown("**참고한 문항(컬럼):** " + ", ".join(questions_used))
 
     render_insight_card("자연어 기반 설명", explanation, key="nlq-insight")
 
