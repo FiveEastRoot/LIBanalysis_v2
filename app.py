@@ -167,18 +167,15 @@ def render_chart_and_table(bar, table, title, key_prefix=""):
 def show_table(df, caption):
     st.dataframe(df)
 
+import streamlit.components.v1 as components  # 파일 상단에 위치해야 함
 
 def render_insight_card(title: str, content: str, key: str = None):
-    # content가 None일 수 있으니 문자열로 보장
     if content is None:
         content = "(내용 없음)"
     content = str(content)
-    # HTML용 escape 및 줄바꿈 처리
     content_html = escape_tildes(content, mode="html").replace("\n", "<br>")
-    # 높이 추정: 줄 수 기반 (최대 제한)
     line_count = content.count("\n") + 3
     height = min(800, 70 + 20 * line_count)
-
     html = f"""
     <div style="
         border:1px solid #e2e8f0;
@@ -193,8 +190,8 @@ def render_insight_card(title: str, content: str, key: str = None):
         <div style="font-size:0.95em; line-height:1.4em;">{content_html}</div>
     </div>
     """
-    # 고유한 key를 주는 것이 안전하므로 호출부에서 중복 안 나도록 주의
     components.html(html, height=height, key=key)
+
 
 
 # ─────────────────────────────────────────────────────
