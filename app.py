@@ -65,23 +65,39 @@ def interpret_midcategory_scores(df):
         parts.append("모든 중분류가 전체 평균 수준과 비슷합니다.")
     return " ".join(parts)
 
+import re
+
 def extract_question_code(col_name: str) -> str:
     """
+    컬럼명에서 문항 코드/번호만 뽑아냄.
     예: 'Q1-1. 공간 만족도' -> 'Q1-1', 'SQ2 GROUP' -> 'SQ2', 'DQ4 1순위' -> 'DQ4'
     """
+    # 우선 대문자+숫자+언더/하이픈 조합을 잡아보자 (예: Q1-1, DQ4, SQ2_GROUP)
+    m = re.match(r'^([A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*)', col_name.strip())
+    if m:
+        return m.group(1)
+    # fallback: 마침표 전
     if '.' in col_name:
         return col_name.split('.', 1)[0].strip()
     if ' ' in col_name:
         return col_name.split(' ', 1)[0].strip()
     return col_name.strip()
 
+def expand_midcategory_to_columns(midcategory: str, df: pd.DataFrame):
+    """
+    중분류 이름(예: '공간 및 이용편의성')을 받아 그에 해당하는 실제 컬럼명 목록으로 확장.
+    """
+    for mid, predicate in MIDDLE_CATEGORY_MAPPING.items():
+        if midcategory.strip().lower() == mid.strip().lower():
+            return [c for c in df.columns if predicate(c)]
+    return []
+
 def get_questions_used(spec: dict, df_full: pd.DataFrame, df_subset: pd.DataFrame):
     """
     자연어 질의 스펙을 보고 실제 참고된 문항 전체 이름들과 문항 코드(번호)만 추출한다.
-    반환: (full_names_set, codes_set)
+    반환: (used_full_list, used_codes_list) — 순서 보존, 중복 제거
     """
     used_full = []
-    used_codes = []
 
     # x, y, groupby
     for key in ("x", "y", "groupby"):
@@ -93,9 +109,11 @@ def get_questions_used(spec: dict, df_full: pd.DataFrame, df_subset: pd.DataFram
                 if v in df_subset.columns:
                     used_full.append(v)
                 else:
-                    # 중분류 이름일 수도 있음
                     expanded = expand_midcategory_to_columns(v, df_subset)
-                    used_full.extend(expanded)
+                    if expanded:
+                        used_full.extend(expanded)
+                    else:
+                        used_full.append(v)
         else:
             if val in df_subset.columns:
                 used_full.append(val)
@@ -104,31 +122,39 @@ def get_questions_used(spec: dict, df_full: pd.DataFrame, df_subset: pd.DataFram
                 if expanded:
                     used_full.extend(expanded)
                 else:
-                    used_full.append(val)  # fallback, 그대로
+                    used_full.append(val)
 
     # filters: 컬럼명 포함
     for f in spec.get("filters", []):
         col = f.get("col")
         if col:
-            if col in df_subset.columns:
-                used_full.append(col)
-            else:
-                used_full.append(col)
+            used_full.append(col)
 
-    # group-based midcategory comparisons may implicitly use all midcategories
+    # focus에 '중분류', '강점', '약점', '전체 평균' 등이 들어가면 중분류 관련 모든 문항 포함
     focus = spec.get("focus", "").lower()
     if any(k in focus for k in ["중분류", "강점", "약점", "전체 평균"]):
-        # 전체 중분류 점수 계산에 쓰이는 컬럼들
         for mid, predicate in MIDDLE_CATEGORY_MAPPING.items():
             cols = [c for c in df_subset.columns if predicate(c)]
             used_full.extend(cols)
 
-    # dedupe
-    used_full = list(dict.fromkeys([u for u in used_full if u]))  # preserve order
-    for col in used_full:
-        used_codes.append(extract_question_code(col))
+    # 순서 유지하며 중복 제거
+    seen = set()
+    used_full_unique = []
+    for c in used_full:
+        if c and c not in seen:
+            seen.add(c)
+            used_full_unique.append(c)
 
-    return used_full, used_codes
+    # 코드만 뽑고 중복 제거
+    used_codes = []
+    seen_codes = set()
+    for col in used_full_unique:
+        code = extract_question_code(col)
+        if code not in seen_codes:
+            seen_codes.add(code)
+            used_codes.append(code)
+
+    return used_full_unique, used_codes
 
 
 # ─────────────────────────────────────────────────────
