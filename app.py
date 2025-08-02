@@ -675,29 +675,42 @@ def build_radar_prompt(overall_profile: dict, combos: list):
 """
     return prompt.strip()
 
+def build_heatmap_prompt(table_df, midcats, label_col="조합"):
+    # 입력 검증
+    if table_df.empty:
+        raise ValueError("table_df가 비어있습니다.")
+    missing_midcats = [mc for mc in midcats if mc not in table_df.columns]
+    if missing_midcats:
+        raise KeyError(f"다음 중분류 컬럼이 table_df에 없습니다: {missing_midcats}")
+    if label_col not in table_df.columns:
+        raise KeyError(f"라벨용 컬럼 '{label_col}'이 table_df에 없습니다.")
 
-def build_heatmap_prompt(table_df, midcats):
     # 전체 평균 계산
     overall_avg = {mc: table_df[mc].mean() for mc in midcats}
 
     # 중분류별 최고/최저 조합 찾기
     extremes = {}
     for mc in midcats:
-        # 최고, 최저 인덱스
+        if table_df[mc].dropna().empty:
+            continue
         highest_idx = table_df[mc].idxmax()
         lowest_idx = table_df[mc].idxmin()
         highest_row = table_df.loc[highest_idx]
         lowest_row = table_df.loc[lowest_idx]
+        hi_label = highest_row[label_col]
+        lo_label = lowest_row[label_col]
+        hi_score = highest_row[mc]
+        lo_score = lowest_row[mc]
         extremes[mc] = {
-            "highest": (highest_row["조합"], highest_row[mc]),
-            "lowest": (lowest_row["조합"], lowest_row[mc])
+            "highest": (hi_label, hi_score),
+            "lowest": (lo_label, lo_score)
         }
 
-    # 조합별 점수 문자열 (조합명 중심)
+    # 조합별 점수 문자열
     combo_lines = []
     for _, r in table_df.iterrows():
-        label = r.get("조합", "")
-        scores = ", ".join(f"{mc}: {r.get(mc, 0):.1f}" for mc in midcats)
+        label = r[label_col]
+        scores = ", ".join(f"{mc}: {r[mc]:.1f}" for mc in midcats)
         combo_lines.append(f"{label}: {scores}")
     combos_str = "\n".join(combo_lines)
 
@@ -706,9 +719,9 @@ def build_heatmap_prompt(table_df, midcats):
 
     # 예시 블록 생성
     extremes_example_lines = []
-    for mc in midcats:
-        hi_name, hi_score = extremes[mc]["highest"]
-        lo_name, lo_score = extremes[mc]["lowest"]
+    for mc, vals in extremes.items():
+        hi_name, hi_score = vals["highest"]
+        lo_name, lo_score = vals["lowest"]
         extremes_example_lines.append(f"* [{mc}]  최고: {hi_name}({hi_score:.1f})  최저: {lo_name}({lo_score:.1f})")
     extremes_example_block = "\n".join(extremes_example_lines)
 
@@ -722,9 +735,9 @@ def build_heatmap_prompt(table_df, midcats):
 
 요청:
 1. [시각화 해석]에서 히트맵의 주요 군집, 고점/저점, 조합 간 유사성·차이점을 200자 내외로 요약.
-2. 각 중분류별로 전체 평균 흐름을 짚은 뒤, 실제 조합명을 써서 다음 형식으로 정리: 
+2. 각 중분류별로 전체 평균 흐름을 짚은 뒤, 실제 조합명을 써서 다음 형식으로 정리:
 {extremes_example_block}
-   - 절대 '응답자 X명'처럼 표현하지 말고, 입력된 정확한 조합명(예: 여성 | 35-39세)만 사용할 것.
+   - 절대 '응답자 X명'처럼 표현하지 말고, 입력된 정확한 조합명만 사용할 것.
 3. 전체 경향 및 예외는 조합명 명시 부분을 제외하고 기존 방식대로 유지.
 4. 마지막에 요약 한 문단과 조합명을 포함한 구체적 행동 권장점 3개 제시.
 -은 모두 -로, 숫자는 한 자리 소수, 소제목 포함, 조합명 반복, 전체 길이 1200자 내외.
@@ -732,7 +745,7 @@ def build_heatmap_prompt(table_df, midcats):
 [출력 예시]
 ---
 [시각화 해석]
-정보 획득과 문화-교육 향유가 상위에 몰려 있고, 소통 및 정책 활용은 여러 조합에서 낮아 대비가 뚜렷하다. 여성 | 30-34세와 여성 | 35-39세는 유사한 프로파일로 군집을 이루며 예외적인 소통 점수를 보인다.
+정보 획득과 문화-교육 향유가 상위에 몰려 있고, 소통 및 정책 활용은 여러 조합에서 낮아 대비가 뚜렷하다. 여성 | 30-34세와 여성 | 35-39세는 유사한 프로파일로 군집을 이룬다.
 
 ### 1. 중분류별 최고·최저
 * [공간 및 이용편의성]  최고: 여성 | 35-39세(90.8)  최저: 남성 | 20-25세(51.2)
@@ -749,7 +762,6 @@ def build_heatmap_prompt(table_df, midcats):
 ---
 """
     return prompt.strip()
-
 
 def build_delta_prompt(delta_df, midcats):
     rows = []
@@ -1909,9 +1921,9 @@ def page_segment_analysis(df):
     )
     st.plotly_chart(fig_abs, use_container_width=True)
 
-
-    heatmap_table = group_means[[*segment_cols_filtered, *midcats, "응답자수"]]
-    prompt_heat = build_heatmap_prompt(heatmap_table.rename(columns={"응답자수": "응답자수"}), midcats)
+    # 프롬프트용 테이블: 조합명과 중분류 점수만 전달
+    heatmap_table = group_means[["조합", *midcats]]
+    prompt_heat = build_heatmap_prompt(heatmap_table, midcats, label_col="조합")
     heat_insight = call_gpt_for_insight(prompt_heat)
     heat_insight = heat_insight.replace("~", "-")
     render_insight_card("GPT 생성형 해석 (히트맵)", heat_insight, key="heatmap-insight")
