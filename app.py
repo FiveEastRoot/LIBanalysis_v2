@@ -677,50 +677,75 @@ def build_radar_prompt(overall_profile: dict, combos: list):
 
 
 def build_heatmap_prompt(table_df, midcats):
-    rows = []
+    # 전체 평균 계산
+    overall_avg = {mc: table_df[mc].mean() for mc in midcats}
+
+    # 중분류별 최고/최저 조합 찾기
+    extremes = {}
+    for mc in midcats:
+        # 최고, 최저 인덱스
+        highest_idx = table_df[mc].idxmax()
+        lowest_idx = table_df[mc].idxmin()
+        highest_row = table_df.loc[highest_idx]
+        lowest_row = table_df.loc[lowest_idx]
+        extremes[mc] = {
+            "highest": (highest_row["조합"], highest_row[mc]),
+            "lowest": (lowest_row["조합"], lowest_row[mc])
+        }
+
+    # 조합별 점수 문자열 (조합명 중심)
+    combo_lines = []
     for _, r in table_df.iterrows():
         label = r.get("조합", "")
-        n = int(r.get("응답자수", 0))
         scores = ", ".join(f"{mc}: {r.get(mc, 0):.1f}" for mc in midcats)
-        rows.append(f"{label} (응답자수={n}): {scores}")
-    table_str = "\n".join(rows)
-    midcats_str = ", ".join(midcats)
+        combo_lines.append(f"{label}: {scores}")
+    combos_str = "\n".join(combo_lines)
+
+    # 전체 평균 서술
+    avg_str = ", ".join(f"{mc}({overall_avg[mc]:.1f}점)" for mc in midcats)
+
+    # 예시 블록 생성
+    extremes_example_lines = []
+    for mc in midcats:
+        hi_name, hi_score = extremes[mc]["highest"]
+        lo_name, lo_score = extremes[mc]["lowest"]
+        extremes_example_lines.append(f"* [{mc}]  최고: {hi_name}({hi_score:.1f})  최저: {lo_name}({lo_score:.1f})")
+    extremes_example_block = "\n".join(extremes_example_lines)
+
     prompt = f"""
 전략 보고서용 - 히트맵 인사이트
 
 입력:
-- 조합별 중분류 만족도:
-{table_str}
+- 전체 평균: {avg_str}
+- 조합별 중분류 만족도 (조합명과 점수만, 응답자 수 기반 표현 금지):
+{combos_str}
 
 요청:
-1. [시각화 해석]에서 히트맵 상의 주요 군집, 고점/저점, 눈에 띄는 조합 간 유사성·차이점 등을 200자 이내로 요약.
-2. 중분류별 전체 평균이 어떤지 간단히 짚은 후, **각 중분류마다** 다음 형식으로 정리:
-   * [중분류명]  최고: <조합명>(점수)  최저: <조합명>(점수)
-   여기서 절대 **응답자 수**를 기준으로 표현하지 말고, **조합명**을 써야 하며 “응답자 X명” 같은 표현은 쓰지 않을 것.
+1. [시각화 해석]에서 히트맵의 주요 군집, 고점/저점, 조합 간 유사성·차이점을 200자 내외로 요약.
+2. 각 중분류별로 전체 평균 흐름을 짚은 뒤, 실제 조합명을 써서 다음 형식으로 정리: 
+{extremes_example_block}
+   - 절대 '응답자 X명'처럼 표현하지 말고, 입력된 정확한 조합명(예: 여성 | 35-39세)만 사용할 것.
 3. 전체 경향 및 예외는 조합명 명시 부분을 제외하고 기존 방식대로 유지.
-4. 마지막에 요약 문단과, 조합명을 포함한 구체적 행동 권장점 3개 제시.
+4. 마지막에 요약 한 문단과 조합명을 포함한 구체적 행동 권장점 3개 제시.
 -은 모두 -로, 숫자는 한 자리 소수, 소제목 포함, 조합명 반복, 전체 길이 1200자 내외.
-
 
 [출력 예시]
 ---
 [시각화 해석]
-정보 획득과 문화-교육 향유가 전반적으로 평균보다 높고, 소통 및 정책 활용은 낮아 전체적으로 불균형이 보인다. 여성 | 30-34세와 여성 | 35-39세는 강한 군집을 이루며 비슷한 프로파일이다.
+정보 획득과 문화-교육 향유가 상위에 몰려 있고, 소통 및 정책 활용은 여러 조합에서 낮아 대비가 뚜렷하다. 여성 | 30-34세와 여성 | 35-39세는 유사한 프로파일로 군집을 이루며 예외적인 소통 점수를 보인다.
 
-### 1. 그룹별 특징 및 중분류별 최고·최저
-* 정보 획득 전체 평균이 높고, 가장 높은 조합은 여성 | 30-34세, 가장 낮은 조합은 남성 | 60-64세다.
-* 문화-교육 향유는 평균 이상이며, 남성 | 40-44세가 가장 높고, 여성 | 65-69세가 가장 낮다.
-* 소통 및 정책 활용은 평균 이하이고, 여성 | 50-54세가 상대적으로 높은 반면, 남성 | 55-59세가 가장 낮다.
-
-### 2. 전체 경향 및 예외
+### 1. 중분류별 최고·최저
 * [공간 및 이용편의성]  최고: 여성 | 35-39세(90.8)  최저: 남성 | 20-25세(51.2)
 * [정보 획득 및 활용]  최고: 여성 | 30-34세(88.1)  최저: 남성 | 55-59세(60.4)
 * [소통 및 정책 활용]  최고: 여성 | 40-44세(83.0)  최저: 남성 | 50-54세(58.7)
 
+### 2. 전체 경향 및 예외
+* 전반적으로 정보 획득이 높고 소통이 낮은 흐름이며, 여성 | 40-44세만 소통에서 예외적으로 평균을 상회한다.
+
 ### 3. 요약 및 행동 권장점
-* 여성 30-40대에게 정보 제공 인터페이스를 고도화하여 만족도 확대.
-* 소통 점수가 낮은 남성 | 55-59세에는 맞춤형 안내 재설계.
-* 문화-교육 향유가 높은 남성 | 40-44세 대상으로 관련 프로그램 연계 강화.
+* 여성 30-40대에게 정보 접근성 강화.
+* 소통 약점 반복 조합(예: 남성 | 50-54세)에는 맞춤 안내 재설계.
+* 문화-교육 향유가 높은 조합은 프로그램 연계 강화.
 ---
 """
     return prompt.strip()
