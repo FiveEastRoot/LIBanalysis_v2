@@ -608,7 +608,7 @@ def extract_keyword_and_audience(responses, batch_size=20):
             results.append((row['response'], row['keywords'], row['audience']))
     return results
 
-def call_gpt_for_insight(prompt, model="gpt-4.1-nano", temperature=0.2, max_tokens=1500):
+def call_gpt_for_insight(prompt, model="gpt-4.1-mini", temperature=0.2, max_tokens=1500):
     try:
         resp = client.chat.completions.create(
             model=model,
