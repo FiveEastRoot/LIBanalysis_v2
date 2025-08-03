@@ -1313,26 +1313,50 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
         )
         spec["chart"] = normalize_chart_choice(chosen)
 
-        # filters
+
+        # filters: editable list with persistent state across reruns
+        filter_state_key = f"nlq_filters_{q_hash}"
+        if filter_state_key not in st.session_state:
+            # deep copy to avoid mutating original
+            st.session_state[filter_state_key] = [dict(f) for f in spec.get("filters", [])]
+
         st.markdown("필터 조건 (여러 개 허용)")
-        filters = spec.get("filters", [])
-        new_filters = []
+        filters = st.session_state[filter_state_key]
+
+        # 편집 UI
         for i, f in enumerate(filters):
-            cols = st.columns([3,2,3,1])
+            cols = st.columns([3, 2, 3, 1])
             with cols[0]:
-                col_name = st.text_input(f"필터 {i+1} 컬럼(col)", value=f.get("col",""), key=f"nlq_filter_col_{q_hash}_{i}")
+                col_name = st.text_input(f"필터 {i+1} 컬럼(col)", value=f.get("col", ""), key=f"nlq_filter_col_{q_hash}_{i}")
             with cols[1]:
-                op = st.selectbox(f"연산자(op) {i+1}", options=["contains","==","in"], index=["contains","==","in"].index(f.get("op","contains")) if f.get("op") in ["contains","==","in"] else 0, key=f"nlq_filter_op_{q_hash}_{i}")
+                op = st.selectbox(
+                    f"연산자(op) {i+1}",
+                    options=["contains", "==", "in"],
+                    index=["contains", "==", "in"].index(f.get("op", "contains")) if f.get("op") in ["contains", "==", "in"] else 0,
+                    key=f"nlq_filter_op_{q_hash}_{i}"
+                )
             with cols[2]:
-                val = st.text_input(f"값(value) {i+1}", value=str(f.get("value","")), key=f"nlq_filter_value_{q_hash}_{i}")
+                val = st.text_input(f"값(value) {i+1}", value=str(f.get("value", "")), key=f"nlq_filter_value_{q_hash}_{i}")
             with cols[3]:
                 remove = st.checkbox("삭제", key=f"nlq_filter_rm_{q_hash}_{i}")
-            if not remove:
+
+            if remove:
+                filters[i]["_remove"] = True
+            else:
                 parsed_val = [v.strip() for v in val.split(",")] if op == "in" and "," in val else val
-                new_filters.append({"col": col_name, "op": op, "value": parsed_val})
+                filters[i].update({"col": col_name, "op": op, "value": parsed_val})
+                filters[i].pop("_remove", None)
+
+        # 실제 삭제 처리
+        st.session_state[filter_state_key] = [f for f in filters if not f.get("_remove")]
+
+        # 새 필터 추가
         if st.button("필터 추가", key=f"nlq_filter_add_{q_hash}"):
-            new_filters.append({"col":"", "op":"contains", "value":""})
-        spec["filters"] = new_filters
+            st.session_state[filter_state_key].append({"col": "", "op": "contains", "value": ""})
+
+        # spec에 반영
+        spec["filters"] = st.session_state[filter_state_key]
+
 
         # focus
         spec["focus"] = st.text_input("질의 요약 (focus)", value=spec.get("focus") or question, key=f"nlq_focus_{q_hash}")
