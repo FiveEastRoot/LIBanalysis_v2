@@ -2765,9 +2765,11 @@ elif mode == "심화 분석":
 elif mode == "전략 인사이트(기본)":
     st.header("🧠 전략 인사이트 (기본)")
     show_basic_strategy_insights(df)
+"""
 elif mode == "자연어 질의":
     st.header("🗣️ 자연어 질문 기반 자동 분석")
     st.markdown("예시: '혼자 이용하는 사람들의 연령대 분포 보여주고 주로 가는 도서관별 중분류 만족도 강점/약점 비교해줘.'")
     question = st.text_input("자연어 질문을 입력하세요", placeholder="예: 혼자 이용자들의 주 이용 도서관별 만족도 비교하고 강점 약점 알려줘")
     if question:
         handle_nl_question_v2(df, question)
+"""
