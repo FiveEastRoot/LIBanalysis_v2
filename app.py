@@ -2523,10 +2523,6 @@ def page_segment_analysis(df):
             signif = "유의미" if not (ci_lower <= 0 <= ci_upper) else "불확실"
             ci_summary.append(f"{combo}: 편차 {delta:.1f}, SE {se:.2f} ({signif})")
 
-        prompt_ci = build_ci_prompt(subset_local, mc)
-        ci_insight = call_gpt_for_insight(prompt_ci)
-        render_insight_card("GPT 생성형 해석 (신뢰구간)", ci_insight, key="ci-insight")
-
 # --- 추가: 편차 + 신뢰구간 상세 테이블 ---
         ci_display = subset_local[["조합", mc, "delta", "se"]].copy()
         ci_display["신뢰구간 하한"] = (ci_display["delta"] - ci_display["se"]).round(2)
@@ -2536,6 +2532,12 @@ def page_segment_analysis(df):
         )
         st.markdown(f"#### '{mc}' 편차 + 신뢰구간 상세")
         st.dataframe(_sanitize_dataframe_for_streamlit(ci_display))
+
+
+        prompt_ci = build_ci_prompt(subset_local, mc)
+        ci_insight = call_gpt_for_insight(prompt_ci)
+        render_insight_card("GPT 생성형 해석 (신뢰구간)", ci_insight, key="ci-insight")
+
 
 
 
