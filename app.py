@@ -2918,13 +2918,15 @@ st.markdown(
 # 페이지 내용이 헤더에 가려지지 않도록 약간의 여백 삽입
 st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
 
-# 사이드바 최상단 로고
-logo_path = os.path.join("assets", "logo.png")  # 커밋해둔 상대 경로
+# 사이드바 최상단 로고 (assets/logo.png 를 프로젝트에 넣어둔 경우)
+logo_path = os.path.join("assets", "logo.png")
 try:
     logo = Image.open(logo_path)
     st.sidebar.image(logo, use_column_width=False, width=120)
 except FileNotFoundError:
-    st.sidebar.markdown("🖼️ 로고를 찾을 수 없습니다. 경로 확인: " + logo_path)
+    st.sidebar.markdown(f"🖼️ 로고를 찾을 수 없습니다: {logo_path}")
+except Exception as e:
+    st.sidebar.markdown(f"로고 로딩 실패: {e}")
 
 mode = st.sidebar.radio("LIBanalysis", ["기본 분석", "심화 분석", "전략 인사이트(기본)"])
 
