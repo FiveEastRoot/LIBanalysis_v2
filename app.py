@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import re
 import io
+from PIL import Image
 import openai
 import streamlit.components.v1 as components 
 import hashlib
@@ -2908,7 +2909,7 @@ st.markdown(
         text-align: center;
         border-bottom: 2px solid #eee;
     ">
-        <h1 style="margin: 0; font-size: 3rem; font-weight: bold;">LIBSCOPE</h1>
+        <h1 style="margin: 0; font-size: 3rem; font-weight: bold;">LIBanalysis</h1>
     </div>
     """,
     unsafe_allow_html=True
@@ -2916,8 +2917,15 @@ st.markdown(
 # 페이지 내용이 헤더에 가려지지 않도록 약간의 여백 삽입
 st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
 
+# 사이드바 최상단 로고
+logo_path = os.path.join("assets", "logo.png")  # 커밋해둔 상대 경로
+try:
+    logo = Image.open(logo_path)
+    st.sidebar.image(logo, use_column_width=False, width=120)
+except FileNotFoundError:
+    st.sidebar.markdown("🖼️ 로고를 찾을 수 없습니다. 경로 확인: " + logo_path)
 
-mode = st.sidebar.radio("LIBSCOPE", ["기본 분석", "심화 분석", "전략 인사이트(기본)"])
+mode = st.sidebar.radio("LIBanalysis", ["기본 분석", "심화 분석", "전략 인사이트(기본)"])
 
 uploaded = st.file_uploader("📂 엑셀(.xlsx) 파일 업로드", type=["xlsx"])
 if not uploaded:
