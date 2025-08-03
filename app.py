@@ -226,6 +226,61 @@ def safe_markdown(text, **kwargs):
     safe = escape_tildes(text, mode="markdown")
     st.markdown(safe, **kwargs)
 
+# ------------------ 장문 응답용 정제 ------------------
+def is_meaningful_long(text: str) -> bool:
+    exclude = ['없음', '모름', '없어요', 'x', '해당없음', '없다', '없습니다', '없습니다.']
+    t = str(text).strip()
+    if len(t) < 4:
+        return False
+    for e in exclude:
+        if e in t:
+            return False
+    return True
+
+@st.cache_data(show_spinner=False)
+def get_clean_long_responses(raw: list[str]) -> list[str]:
+    return [r for r in raw if is_meaningful_long(r)]
+
+# ------------------ GPT 프롬프트 생성/파싱 ------------------
+def make_theme_messages(batch: list[str]) -> list[dict]:
+    system_content = (
+        "당신은 도서관 이용자 설문 자유서술 응답을 아래 6개 주제 중 하나로 분류하고, "
+        "각 주제별 대표 키워드(쉼표로), 요약(한 문장 내외)으로 정리하는 분석가입니다. "
+        "반드시 주제명은 다음만 사용하세요: 공간 및 시설, 자료 확충, 프로그램 다양화, 운영 및 시스템, 직원 및 응대, 기타.\n"
+        "출력은 마크다운 표 형태로 아래처럼:\n"
+        "| 주제명 | 대표 키워드 | 요약 |"
+    )
+    user_block = "[실제 입력 응답]\n" + "\n".join(batch)
+    return [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": user_block + "\n\n[결과 표]\n| 주제명 | 대표 키워드 | 요약 |"}
+    ]
+
+def make_sentiment_messages(batch: list[str], theme_df: pd.DataFrame) -> list[dict]:
+    system_content = (
+        "당신은 도서관 자유서술 응답을 주제별로 감성(긍정/부정/중립) 분류하고, "
+        "각 주제+감성 조합에 대해 특징적인 표현 양상을 200자 내외로 요약하는 분석가입니다. "
+        "감성은 '긍정', '부정', '중립'만 사용하며 출력은 마크다운 표로 아래처럼:\n"
+        "| 주제명 | 감성 | 표현 양상 요약 |"
+    )
+    user_block = "[실제 입력 응답]\n" + "\n".join(batch)
+    theme_table_md = theme_df.to_markdown(index=False)
+    combined = user_block + "\n\n[주제 테이블]\n" + theme_table_md
+    return [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": combined + "\n\n[결과 표]\n| 주제명 | 감성 | 표현 양상 요약 |"}
+    ]
+
+def parse_markdown_table(table_text: str, cols: list[str]) -> pd.DataFrame:
+    lines = [l for l in table_text.splitlines() if "|" in l and "---" not in l]
+    records = []
+    for line in lines:
+        parts = [p.strip() for p in line.strip().split("|")[1:-1]]
+        if len(parts) == len(cols):
+            records.append(parts)
+    df = pd.DataFrame(records, columns=cols)
+    return df
+
 
 # ─────────────────────────────────────────────────────
 # DataFrame & visualization helpers
@@ -880,6 +935,52 @@ def build_ci_prompt(subset_df, mc):
 ---
 """
     return prompt.strip()
+@st.cache_data(show_spinner=False)
+def extract_theme_table_long(responses: list[str], batch_size: int = 30) -> pd.DataFrame:
+    all_parts = []
+    for i in range(0, len(responses), batch_size):
+        batch = responses[i:i+batch_size]
+        messages = make_theme_messages(batch)
+        try:
+            resp = safe_chat_completion(model="gpt-4.1", messages=messages, temperature=0.1, max_tokens=800)
+            content = resp.choices[0].message.content.strip()
+        except Exception as e:
+            st.error(f"주제 추출 실패: {e}")
+            continue
+        df_part = parse_markdown_table(content, ['주제명', '대표 키워드', '요약'])
+        all_parts.append(df_part)
+    if all_parts:
+        result = pd.concat(all_parts, ignore_index=True)
+    else:
+        result = pd.DataFrame(columns=['주제명', '대표 키워드', '요약'])
+    # 6개 주제 보장
+    topics = ['공간 및 시설','자료 확충','프로그램 다양화','운영 및 시스템','직원 및 응대','기타']
+    existing = result['주제명'].tolist()
+    for t in topics:
+        if t not in existing:
+            result = pd.concat([result, pd.DataFrame([[t, "", ""]], columns=result.columns)], ignore_index=True)
+    result = result.set_index('주제명').loc[topics].reset_index()
+    return result
+
+@st.cache_data(show_spinner=False)
+def extract_sentiment_table_long(responses: list[str], theme_df: pd.DataFrame, batch_size: int = 50) -> pd.DataFrame:
+    all_parts = []
+    for i in range(0, len(responses), batch_size):
+        batch = responses[i:i+batch_size]
+        messages = make_sentiment_messages(batch, theme_df)
+        try:
+            resp = safe_chat_completion(model="gpt-4.1", messages=messages, temperature=0.1, max_tokens=900)
+            content = resp.choices[0].message.content.strip()
+        except Exception as e:
+            st.error(f"감성 분석 실패: {e}")
+            continue
+        df_part = parse_markdown_table(content, ['주제명', '감성', '표현 양상 요약'])
+        all_parts.append(df_part)
+    if all_parts:
+        result = pd.concat(all_parts, ignore_index=True).drop_duplicates(subset=['주제명','감성'])
+    else:
+        result = pd.DataFrame(columns=['주제명', '감성', '표현 양상 요약'])
+    return result.reset_index(drop=True)
 
 
 # ---------- 자연어 질의  인사이트 파이프라인 ----------
@@ -2781,17 +2882,51 @@ elif mode == "심화 분석":
         st.markdown("#### 상세 데이터")
         st.dataframe(df_mean)
     with tabs[2]:
-        page_segment_analysis(df)
+        st.subheader("장문 서술형 분석 (Q9-DS-5) — 주제/감성 기반 심층")
+        long_cols = [c for c in df.columns if "Q9-DS-5" in c]
+        if not long_cols:
+            st.warning("Q9-DS-5 관련 문항을 찾을 수 없습니다.")
+        else:
+            raw_answers = df[long_cols[0]].dropna().astype(str).tolist()
+            clean_answers = get_clean_long_responses(raw_answers)
+            st.markdown(f"원본 응답: {len(raw_answers)}개 → 의미 있는 응답: {len(clean_answers)}개")
+            if not clean_answers:
+                st.info("분석할 내용이 없습니다.")
+            else:
+                if st.button("1. 주제/키워드/요약 추출"):
+                    with st.spinner("주제 추출 중..."):
+                        theme_df = extract_theme_table_long(clean_answers)
+                        st.success("주제 추출 완료")
+                        st.dataframe(theme_df, use_container_width=True)
+                        st.download_button(
+                            "표1_주제_키워드_요약.xlsx 다운로드",
+                            theme_df.to_excel(index=False),
+                            file_name="표1_주제_키워드_요약.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                else:
+                    theme_df = None
+
+                if theme_df is not None and st.button("2. 주제별 감성 분석"):
+                    with st.spinner("감성 분석 중..."):
+                        sentiment_df = extract_sentiment_table_long(clean_answers, theme_df)
+                        st.success("감성 분석 완료")
+                        st.dataframe(sentiment_df, use_container_width=True)
+                        st.download_button(
+                            "표2_주제별_감성_요약.xlsx 다운로드",
+                            sentiment_df.to_excel(index=False),
+                            file_name="표2_주제별_감성_요약.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+
         
 
 elif mode == "전략 인사이트(기본)":
     st.header("🧠 전략 인사이트 (기본)")
     show_basic_strategy_insights(df)
-"""
-elif mode == "자연어 질의":
-    st.header("🗣️ 자연어 질문 기반 자동 분석")
-    st.markdown("예시: '혼자 이용하는 사람들의 연령대 분포 보여주고 주로 가는 도서관별 중분류 만족도 강점/약점 비교해줘.'")
-    question = st.text_input("자연어 질문을 입력하세요", placeholder="예: 혼자 이용자들의 주 이용 도서관별 만족도 비교하고 강점 약점 알려줘")
-    if question:
-        handle_nl_question_v2(df, question)
-"""
+#elif mode == "자연어 질의":
+#    st.header("🗣️ 자연어 질문 기반 자동 분석")
+#    st.markdown("예시: '혼자 이용하는 사람들의 연령대 분포 보여주고 주로 가는 도서관별 중분류 만족도 강점/약점 비교해줘.'")
+#    question = st.text_input("자연어 질문을 입력하세요", placeholder="예: 혼자 이용자들의 주 이용 도서관별 만족도 비교하고 강점 약점 알려줘")
+#    if question:
+#        handle_nl_question_v2(df, question)
