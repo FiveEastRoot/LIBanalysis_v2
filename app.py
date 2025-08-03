@@ -2597,10 +2597,6 @@ st.markdown(
 )
 # 페이지 내용이 헤더에 가려지지 않도록 약간의 여백 삽입
 st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
-# 여기까지 추가 ----------------------
-
-mode = st.sidebar.radio("LIBSCOPE", ["기본 분석", "심화 분석", "전략 인사이트(기본)"])
-...
 
 
 mode = st.sidebar.radio("LIBSCOPE", ["기본 분석", "심화 분석", "전략 인사이트(기본)"])
