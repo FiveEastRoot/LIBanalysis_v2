@@ -261,25 +261,26 @@ def make_sentiment_messages(batch: list[str], theme_df: pd.DataFrame) -> list[di
     system_content = (
         "당신은 도서관 자유서술 응답을 주제별로 감성(긍정/부정/중립) 분류하고, "
         "각 주제+감성 조합에 대해 특징적인 표현 양상을 200자 내외로 요약하는 분석가입니다. "
-        "다음 조건을 반드시 지키세요:\n"
-        "1. 주제명은 다음 중 하나만 사용: 공간 및 시설, 자료 확충, 프로그램 다양화, 운영 및 시스템, 직원 및 응대, 기타.\n"
+        "다음을 반드시 지키세요:\n"
+        "1. 주제명은: 공간 및 시설, 자료 확충, 프로그램 다양화, 운영 및 시스템, 직원 및 응대, 기타 중 하나만 사용.\n"
         "2. 감성은 '긍정', '부정', '중립'만 사용.\n"
-        "3. 출력은 아래처럼 마크다운 표 형식(헤더+구분선 포함)으로만 제공합니다:\n"
+        "3. 출력은 아래처럼 마크다운 표(헤더+구분선 포함)로만 제공합니다:\n"
         "| 주제명 | 감성 | 표현 양상 요약 |\n"
         "| --- | --- | --- |"
     )
     user_block = "[실제 입력 응답]\n" + "\n".join(batch)
     theme_table_md = theme_df.to_markdown(index=False)
-    combined = (
+    user_content = (
         user_block
         + "\n\n[주제 테이블]\n"
         + theme_table_md
         + "\n\n[결과 표]\n"
-        + "| 주제명 | 감성 | 표현 양상 요약 |"
+        + "| 주제명 | 감성 | 표현 양상 요약 |\n"
+        + "| --- | --- | --- |"
     )
     return [
         {"role": "system", "content": system_content},
-        {"role": "user", "content": combined}
+        {"role": "user", "content": user_content}
     ]
 
 
@@ -991,25 +992,38 @@ def extract_theme_table_long(responses: list[str], batch_size: int = 30) -> pd.D
     result = result.set_index('주제명').loc[topics].reset_index()
     return result
 
-@st.cache_data(show_spinner=False)
-def extract_sentiment_table_long(responses: list[str], theme_df: pd.DataFrame, batch_size: int = 50) -> pd.DataFrame:
-    all_parts = []
+def extract_sentiment_table(responses, theme_df, batch_size=50):
+    all_tables = []
     for i in range(0, len(responses), batch_size):
-        batch = responses[i:i+batch_size]
-        messages = make_sentiment_messages(batch, theme_df)
-        try:
-            resp = safe_chat_completion(model="gpt-4.1", messages=messages, temperature=0.1, max_tokens=900)
-            content = resp.choices[0].message.content.strip()
-        except Exception as e:
-            st.error(f"감성 분석 실패: {e}")
+        batch = [r for r in responses[i:i+batch_size] if isinstance(r, str) and r.strip()]
+        if not batch:
             continue
-        df_part = parse_markdown_table(content, ['주제명', '감성', '표현 양상 요약'])
-        all_parts.append(df_part)
-    if all_parts:
-        result = pd.concat(all_parts, ignore_index=True).drop_duplicates(subset=['주제명','감성'])
+        messages = make_sentiment_messages(batch, theme_df)
+        resp = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            temperature=0.1,
+            max_tokens=900
+        )
+        content = resp['choices'][0]['message']['content'].strip()
+        print("LLM 감성 출력 (디버그):\n", content)  # 형식 확인용
+        all_tables.append(content)
+
+    def table_to_df(table_text):
+        lines = [l for l in table_text.split('\n') if "|" in l and "---" not in l]
+        records = []
+        for line in lines:
+            parts = [p.strip() for p in line.strip().split("|")[1:-1]]
+            if len(parts) == 3:
+                records.append(parts)
+        return pd.DataFrame(records, columns=['주제명', '감성', '표현 양상 요약'])
+
+    if all_tables:
+        result_df = pd.concat([table_to_df(tbl) for tbl in all_tables], ignore_index=True)
+        result_df = result_df.drop_duplicates(subset=["주제명", "감성"]).reset_index(drop=True)
     else:
-        result = pd.DataFrame(columns=['주제명', '감성', '표현 양상 요약'])
-    return result.reset_index(drop=True)
+        result_df = pd.DataFrame(columns=['주제명', '감성', '표현 양상 요약'])
+    return result_df
 
 
 # ---------- 자연어 질의  인사이트 파이프라인 ----------
