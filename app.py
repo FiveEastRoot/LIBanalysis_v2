@@ -1106,7 +1106,14 @@ def add_derived_columns(df):
     return df
 
 def get_segment_columns(df, key):
-    if key == "DQ2":
+    if key == "SQ2":
+        # SQ2 선택 시 무조건 5년 단위 그룹 컬럼만 사용
+        if "SQ2_GROUP" in df.columns:
+            return ["SQ2_GROUP"]
+        else:
+            # 예외 처리를 위해 raw 컬럼이라도 최소 하나는 반환
+            return [c for c in df.columns if c.startswith("SQ2")][:1]
+    elif key == "DQ2":
         if "DQ2_YEARS_GROUP" in df.columns:
             return ["DQ2_YEARS_GROUP"]
         elif "DQ2_YEARS" in df.columns:
