@@ -7,7 +7,9 @@ import plotly.graph_objects as go
 import plotly.express as px
 import re
 import openai
-import streamlit.components.v1 as components  # 파일 상단에 위치해야 함
+import streamlit.components.v1 as components 
+import hashlib
+import jsonschema
 import json 
 import math
 import logging
@@ -453,6 +455,45 @@ def extract_used_questions_from_spec(spec: dict, df_full: pd.DataFrame, df_filte
 
     return used_full_unique, used_codes
 
+# ---- 모델 선택 헬퍼 ----
+_COMPLEXITY_KEYWORDS = [
+    "비교", "강점", "약점", "전체 평균", "프로파일", "차이", "우선순위", "편차", "군집", "세그먼트"
+]
+
+def select_model_for_explanation(spec: dict, computed_metrics: dict) -> str:
+    """
+    간단한 휴리스틱 기반 복잡도 평가 후 모델 선택.
+    점수 기준:
+      - groupby 있으면 +1
+      - 차트가 복잡한 유형이면 +1 (radar, delta_bar, heatmap, grouped_bar)
+      - filters 개수만큼 +1씩
+      - top_segments가 2개 이상이면 +1
+      - focus에 복잡도 키워드 포함되면 각각 +1 (중복 없이)
+    threshold >=3 이면 gpt-4.1, 아니면 gpt-3.5-turbo
+    """
+    score = 0
+    if spec.get("groupby"):
+        score += 1
+    chart = (spec.get("chart") or "").lower() if spec.get("chart") else ""
+    if chart in {"radar", "delta_bar", "heatmap", "grouped_bar"}:
+        score += 1
+    filters = spec.get("filters") or []
+    score += len(filters)
+    top_segments = computed_metrics.get("top_segments", [])
+    if len(top_segments) >= 2:
+        score += 1
+    focus = (spec.get("focus") or "").lower()
+    for kw in _COMPLEXITY_KEYWORDS:
+        if kw.lower() in focus:
+            score += 1
+    # 선택
+    if score >= 3:
+        return "gpt-4.1"
+    else:
+        return "gpt-3.5-turbo"
+
+
+
 
 def cohen_d(x, y):
     x = np.array(x.dropna(), dtype=float)
@@ -843,61 +884,169 @@ def build_ci_prompt(subset_df, mc):
 
 # ---------- 자연어 질의  인사이트 파이프라인 ----------
 
-def parse_nl_query_to_spec(question: str):
-    system_prompt = """
-너는 설문 데이터에 대한 자연어 질의를 받아서 시각화/분석 스펙을 구조화된 JSON으로 바꾸는 파서야.
-출력은 오직 JSON 객체 하나만, 코드블럭 없이 반환해. 모르면 null이나 빈 리스트로 만들어줘.
 
-필드:
-{
-  "chart": "bar" / "line" / "heatmap" / "radar" / "delta_bar" / null,
-  "x": "컬럼명 또는 중분류 이름",
-  "y": null,
-  "groupby": "컬럼명 (비교 기준)",
-  "filters": [ {"col": "컬럼명", "op": "contains"|"=="|"in", "value": "값 또는 리스트"} ],
-  "focus": "설명에서 중점적으로 다룰 포인트"
+# 1. 스펙 스키마 정의 (검증+정규화용)
+SPEC_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "chart": {"type": ["string", "null"], "enum": ["bar", "line", "heatmap", "radar", "delta_bar", "grouped_bar", None]},
+        "x": {"type": ["string", "null"]},
+        "y": {"type": ["string", "null"]},
+        "groupby": {"type": ["string", "array", "null"]},
+        "filters": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "col": {"type": "string"},
+                    "op": {"type": "string", "enum": ["contains", "==", "=", "in"]},
+                    "value": {}
+                },
+                "required": ["col", "op", "value"]
+            }
+        },
+        "focus": {"type": "string"},
+    },
+    "additionalProperties": False
 }
 
-예시:
-1. "혼자 이용하는 사람들의 연령대 분포 보여주고, 주로 가는 도서관별 중분류 만족도 강점/약점 비교해줘."
-   -> {
-        "chart": null,
-        "x": "SQ2_GROUP",
-        "groupby": "SQ4", 
-        "filters": [{"col": "이용형태", "op": "contains", "value": "혼자"}],
-        "focus": "혼자 이용자 연령대 분포 및 주 이용 도서관별 중분류 만족도 강약점 비교"
-      }
-2. "전체 평균 대비 어떤 중분류가 강점인지 레이더로 보여줘."
-   -> {"chart": "radar", "focus": "전체 평균 대비 중분류 강점/약점 비교"}
-3. "주이용서비스별 정보 획득과 소통 만족도 비교해줘."
-   -> {"chart": "grouped_bar", "groupby": "SQ5", "x": "중분류", "focus": "정보 획득 vs 소통 비교"}
+DEFAULT_SPEC = {
+    "chart": None,
+    "x": None,
+    "y": None,
+    "groupby": None,
+    "filters": [],
+    "focus": ""
+}
 
-반드시 자연어에서 유추할 수 있는 필드들을 채우고, focus는 사용자 의도를 압축해서 짧게 작성해.
-"""
-    resp = safe_chat_completion(
-        model="gpt-4.1",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": question}
-        ],
-        temperature=0.2,
-        max_tokens=300
-    )
-    content = resp.choices[0].message.content.strip()
-    content = re.sub(r"^```|```$", "", content).strip()
+def normalize_and_validate_spec(raw_spec: dict, question: str) -> dict:
+    # start from default then overlay
+    spec = {**DEFAULT_SPEC, **{k: raw_spec.get(k) for k in DEFAULT_SPEC.keys() if k in raw_spec}}
+    if not spec.get("focus"):
+        spec["focus"] = question
+    # coerce groupby list to single if necessary
+    gb = spec.get("groupby")
+    if isinstance(gb, list) and len(gb) == 1:
+        spec["groupby"] = gb[0]
     try:
-        spec = json.loads(content)
-    except Exception:
-        spec = {
-            "chart": None,
-            "x": None,
-            "y": None,
-            "groupby": None,
-            "filters": [],
-            "focus": question
-        }
+        jsonschema.validate(instance=spec, schema=SPEC_SCHEMA)
+    except Exception as e:
+        # sloppy fixups: drop invalid filters, coerce bad chart to None
+        if spec.get("chart") not in {"bar", "line", "heatmap", "radar", "delta_bar", "grouped_bar", None}:
+            spec["chart"] = None
+        valid_filters = []
+        for f in spec.get("filters", []):
+            if isinstance(f, dict) and "col" in f and "op" in f and "value" in f:
+                valid_filters.append(f)
+        spec["filters"] = valid_filters
+        # fallback for other violations: ensure required keys present
     return spec
 
+# 2. LLM + rule hybrid parser
+def parse_nl_query_to_spec_v2(question: str) -> dict:
+    system_prompt = """
+너는 설문 데이터 자연어 질의를 구조화된 JSON 스펙으로 변환하는 파서야.
+반환은 오직 JSON 하나. 가능한 경우 아래 필드를 채워라.
+필드 설명:
+- chart: "bar"/"line"/"heatmap"/"radar"/"delta_bar"/"grouped_bar" 또는 null
+- x: 주 축 (컬럼명 또는 중분류)
+- y: (가능하면) 비교 축
+- groupby: 비교 기준 (단일 또는 리스트)
+- filters: [{"col":..., "op": "contains"|"=="|"in", "value": ...}, ...]
+- focus: 사용자의 의도 요약
+
+예시:
+"혼자 이용하는 사람들의 연령대 분포 보여주고 주로 가는 도서관별 중분류 만족도 강점/약점 비교" ->
+{
+  "chart": null,
+  "x": "SQ2_GROUP",
+  "groupby": "SQ4",
+  "filters": [{"col": "이용형태", "op": "contains", "value": "혼자"}],
+  "focus": "혼자 이용자 연령대 분포 및 주 이용 도서관 중분류 강약점 비교"
+}
+불확실한 부분이면 null을 넣고, focus는 항상 질문을 압축해서 짧게 작성해.
+출력은 코드블럭 없이 순수 JSON만.
+"""
+    try:
+        resp = safe_chat_completion(
+            model="gpt-4.1",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": question}
+            ],
+            temperature=0.2,
+            max_tokens=400
+        )
+        content = resp.choices[0].message.content.strip()
+        content = re.sub(r"^```json\s*|\s*```$", "", content, flags=re.IGNORECASE).strip()
+        raw = json.loads(content)
+    except Exception:
+        # fallback rule-based quick parser (very simple heuristics)
+        raw = {"chart": None, "x": None, "y": None, "groupby": None, "filters": [], "focus": question}
+        lower = question.lower()
+        if "레이더" in question or "radar" in lower:
+            raw["chart"] = "radar"
+        if "비교" in lower and "도서관" in lower:
+            raw["groupby"] = "SQ4"
+        if "혼자" in lower:
+            raw["filters"].append({"col": "이용형태", "op": "contains", "value": "혼자"})
+        if "연령" in lower or "나이" in lower:
+            raw["x"] = "SQ2_GROUP"
+    final_spec = normalize_and_validate_spec(raw, question)
+    return final_spec
+
+# 3. 통합된 문항 추출 (기존 두 버전 합쳐서 하나로)
+def extract_questions_used(spec: dict, df_full: pd.DataFrame, df_filtered: pd.DataFrame):
+    used_full = []
+
+    def add_val(val):
+        if isinstance(val, list):
+            for v in val:
+                used_full.append(v)
+        elif val:
+            used_full.append(val)
+
+    for key in ("x", "y", "groupby"):
+        add_val(spec.get(key))
+
+    for f in spec.get("filters", []):
+        col = f.get("col")
+        if col:
+            used_full.append(col)
+
+    focus = (spec.get("focus") or "").lower()
+    if any(k in focus for k in ["중분류", "강점", "약점", "전체 평균", "프로파일", "비교"]):
+        for mid, predicate in MIDDLE_CATEGORY_MAPPING.items():
+            cols = [c for c in df_filtered.columns if predicate(c)]
+            used_full.extend(cols)
+
+    # expand midcategory names if provided in place of column
+    expanded = []
+    for c in used_full:
+        if c and c not in df_full.columns:
+            for mid, predicate in MIDDLE_CATEGORY_MAPPING.items():
+                if c.strip().lower() == mid.strip().lower():
+                    expanded += [col for col in df_full.columns if predicate(col)]
+        else:
+            expanded.append(c)
+    # dedupe preserving order
+    seen = set()
+    used_full_unique = []
+    for c in expanded:
+        if c and c not in seen:
+            seen.add(c)
+            used_full_unique.append(c)
+
+    # extract codes
+    used_codes = []
+    seen_codes = set()
+    for col in used_full_unique:
+        code = extract_question_code(col)
+        if code not in seen_codes:
+            seen_codes.add(code)
+            used_codes.append(code)
+
+    return used_full_unique, used_codes
 
 def generate_explanation_from_spec(df_subset: pd.DataFrame, spec: dict, computed_metrics: dict, extra_group_stats=None):
     focus = spec.get("focus", "기본 요약")
@@ -965,71 +1114,249 @@ def apply_filters(df: pd.DataFrame, filters: list):
             dff = dff[dff[col].astype(str).str.contains(str(val), na=False)]
     return dff
 
-def handle_nl_question(df: pd.DataFrame, question: str):
-    st.markdown("## 자연어 질의 결과")
-    st.markdown(f"**질의:** {question}")
+# ---- 1. 텍스트 생성만 담당하는 함수 (모델 분기 포함) ----
+def build_explanation_from_spec(spec: dict, computed_metrics: dict, extra_group_stats=None) -> tuple[str, str]:
+    focus = spec.get("focus", "기본 요약")
+    q_codes = computed_metrics.get("questions_used_codes", [])
 
-    spec = parse_nl_query_to_spec(question)
-    df_filtered = apply_filters(df, spec.get("filters", []))
+    model = select_model_for_explanation(spec, computed_metrics)
 
-    if df_filtered.empty:
-        st.warning("필터 적용 결과 데이터가 없습니다. 조건을 조정해보세요.")
-        return
+    # 요약 컨텍스트 구성
+    parts = []
+    if "overall_mid_scores" in computed_metrics:
+        mids = computed_metrics["overall_mid_scores"]
+        parts.append("전체 중분류 평균: " + ", ".join(f"{k} {v:.1f}" for k, v in mids.items()))
+    if "deltas" in computed_metrics:
+        deltas = computed_metrics["deltas"]
+        delta_str = ", ".join(f"{k} {v:+.1f}" for k, v in deltas.items())
+        parts.append("전체 평균 대비 편차: " + delta_str)
+    if "top_segments" in computed_metrics:
+        top = computed_metrics["top_segments"]
+        parts.append("주요 세그먼트/조합: " + "; ".join(f"{t['label']} (n={t['n']})" for t in top))
+    if extra_group_stats:
+        summary_lines = []
+        for group_label, mids in extra_group_stats.items():
+            for mid, stats in mids.items():
+                line = f"{group_label}의 '{mid}' 평균 {stats.get('mean')}, 전체 대비 {stats.get('delta_vs_overall'):+.1f}"
+                if stats.get("p_value_vs_rest") is not None:
+                    line += f", p={stats['p_value_vs_rest']}"
+                if stats.get("cohen_d_vs_rest") is not None:
+                    line += f", d={stats['cohen_d_vs_rest']}"
+                summary_lines.append(line)
+        parts.append("그룹 비교: " + " / ".join(summary_lines[:3]))
 
-    # 참고한 문항 추출
+    summary_context = "\n".join(parts)
+
+    prompt = f"""
+너는 전략 보고서 작성자다. 아래 컨텍스트와 사용자 질의 포커스를 참고해 명확한 인사이트를 만들어줘.
+
+사용자 질의 포커스: {focus}
+참고한 문항 코드: {', '.join(q_codes)}
+
+데이터 요약:
+{summary_context}
+
+요청:
+1. 주요 관찰 패턴 2~3개를 기술해줘.
+2. 강점과 약점을 구체적으로 조합명이나 항목명을 쓰면서 숫자와 함께 설명해줘.
+3. 우선 개입/확장할만한 행동 제안 2개를 제시해줘.
+4. 전체 길이 500~1000자, 비즈니스 톤, 숫자는 한 자리 소수, '-' 사용.
+
+출력은 오직 텍스트로만 해줘.
+"""
+    max_tokens = 1000 if model == "gpt-4.1" else 700
+
     try:
-        questions_used_full, questions_used_codes = get_questions_used(spec, df, df_filtered)
-    except NameError:
-        questions_used_full, questions_used_codes = [], []
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "너는 전략 리포트 작성자이며, 주어진 데이터를 바탕으로 명확하고 간결한 인사이트를 제공해야 한다."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.2,
+            max_tokens=max_tokens,
+        )
+        explanation = resp.choices[0].message.content.strip()
+    except Exception as e:
+        logging.warning(f"GPT 호출 실패 ({model}): {e}")
+        explanation = f"GPT 해석 생성에 실패했습니다: {e}"
 
-    if questions_used_codes:
-        seen_codes = set()
-        unique_codes = [c for c in questions_used_codes if not (c in seen_codes or seen_codes.add(c))]
-        st.markdown("**참고한 문항 (문항번호만):** " + ", ".join(unique_codes))
+    explanation = explanation.replace("~", "-")
+    return explanation.strip(), model
 
-    # 중분류 지표
-    overall_mid_scores = compute_midcategory_scores(df_filtered)
-    overall_mid_dict = {k: float(v) for k, v in overall_mid_scores.items()} if not overall_mid_scores.empty else {}
-    global_mid_scores = compute_midcategory_scores(df)
-    deltas = {k: overall_mid_dict.get(k, 0) - float(global_mid_scores.get(k, overall_mid_dict.get(k, 0))) for k in overall_mid_dict}
+# ---- 2. 렌더링 담당 함수 (기존 카드 스타일 유지) ----
+def render_explanation_from_spec(title: str, explanation_text: str, model: str, key: str = None):
+    # 모델 정보를 맨 앞에 붙여서 보여줌
+    decorated = f"**사용 모델:** {model}\n\n{explanation_text}"
+    render_insight_card(title, decorated, key=key)
 
-    # 상위 세그먼트
-    top_segments = []
-    gb = spec.get("groupby")
-    if gb and gb in df_filtered.columns:
-        counts = df_filtered[gb].astype(str).value_counts().nlargest(3)
-        for label, n in counts.items():
-            subset = df_filtered[df_filtered[gb].astype(str) == label]
-            profile = compute_midcategory_scores(subset)
-            top_segments.append({
-                "label": f"{gb}={label}",
-                "n": int(n),
-                "profile": {k: float(v) for k, v in profile.items()}
-            })
+
+def handle_nl_question_v2(df: pd.DataFrame, question: str):
+    st.markdown("## 자연어 질의 결과")
+    st.markdown(f"**원문 질의:** {question}")
+
+    # 캐시 키 (같은 질문이면 재호출 방지)
+    q_hash = hashlib.sha256(question.strip().encode("utf-8")).hexdigest()
+    cache_key = f"nlq_cache_{q_hash}"
+    cached = st.session_state.get(cache_key)
+
+    # 파싱 (LLM + 룰 하이브리드) 및 정규화
+    spec = parse_nl_query_to_spec_v2(question)
+    st.markdown("### 파싱된 스펙 (수정 가능)")
+    with st.expander("스펙 상세 및 수동 수정", expanded=True):
+        # chart
+        chart_options = [None, "bar", "line", "heatmap", "radar", "delta_bar", "grouped_bar"]
+        spec["chart"] = st.selectbox("차트 유형 (chart)", spec.get("chart"), options=chart_options, format_func=lambda x: x if x else "없음")
+        # x, y, groupby
+        spec["x"] = st.text_input("x 축 / 주요 축", value=spec.get("x") or "")
+        spec["y"] = st.text_input("y 축 (필요시)", value=spec.get("y") or "")
+        spec["groupby"] = st.text_input("비교 기준 (groupby)", value=spec.get("groupby") or "")
+
+        # filters: editable list
+        st.markdown("필터 조건 (여러 개 허용)")
+        filters = spec.get("filters", [])
+        new_filters = []
+        for i, f in enumerate(filters):
+            cols = st.columns([3, 2, 3, 1])
+            with cols[0]:
+                col_name = st.text_input(f"필터 {i+1} 컬럼(col)", value=f.get("col", ""), key=f"nlq_filter_col_{q_hash}_{i}")
+            with cols[1]:
+                op = st.selectbox(f"연산자(op) {i+1}", options=["contains", "==", "in"], index=["contains", "==", "in"].index(f.get("op", "contains")) if f.get("op") in ["contains", "==", "in"] else 0, key=f"nlq_filter_op_{q_hash}_{i}")
+            with cols[2]:
+                val = st.text_input(f"값(value) {i+1}", value=str(f.get("value", "")), key=f"nlq_filter_value_{q_hash}_{i}")
+            with cols[3]:
+                remove = st.checkbox("삭제", key=f"nlq_filter_rm_{q_hash}_{i}")
+            if not remove:
+                # parse list if op == in and comma-separated
+                parsed_val = [v.strip() for v in val.split(",")] if op == "in" and "," in val else val
+                new_filters.append({"col": col_name, "op": op, "value": parsed_val})
+        # add new filter row
+        if st.button("필터 추가", key=f"nlq_filter_add_{q_hash}"):
+            new_filters.append({"col": "", "op": "contains", "value": ""})
+        spec["filters"] = new_filters
+
+        # focus override (optional)
+        spec["focus"] = st.text_input("질의 요약 (focus)", value=spec.get("focus") or question)
+
+        # validate & normalize again after manual edits
+        spec = normalize_and_validate_spec(spec, question)
+
+        # show human-readable summary
+        readable = []
+        if spec["chart"]:
+            readable.append(f"차트: {spec['chart']}")
+        if spec["x"]:
+            readable.append(f"x: {spec['x']}")
+        if spec["y"]:
+            readable.append(f"y: {spec['y']}")
+        if spec["groupby"]:
+            readable.append(f"groupby: {spec['groupby']}")
+        if spec["filters"]:
+            filt_strs = [f"{f['col']} {f['op']} {f['value']}" for f in spec["filters"]]
+            readable.append(f"필터: {'; '.join(filt_strs)}")
+        readable.append(f"focus: {spec['focus']}")
+        st.markdown("**요약된 스펙 해석:** " + " | ".join(readable))
+
+    # 캐시 사용 여부 판단: 질문 + spec 조합으로 간단히 비교
+    use_cache = cached and cached.get("spec") == spec
+    if use_cache:
+        st.info("이전 동일 질의/스펙 결과를 재사용합니다.")
+        computed_metrics = cached["computed_metrics"]
+        extra_group_stats = cached.get("extra_group_stats")
+        explanation_text = cached["explanation_text"]
+        # 다시 렌더링 (insight card는 이미 있었을 수 있으므로 재사용한 텍스트로)
+        render_insight_card("재사용된 GPT 생성형 해석", explanation_text, key=f"nlq-insight-cached-{q_hash}")
     else:
-        top_segments.append({
-            "label": "필터된 전체",
-            "n": len(df_filtered),
-            "profile": overall_mid_dict
-        })
+        # 필터 적용
+        df_filtered = apply_filters(df, spec.get("filters", []))
+        if df_filtered.empty:
+            st.warning("필터 적용 결과 데이터가 없습니다. 조건을 조정해보세요.")
+            return
 
-    computed_metrics = {
-        "overall_mid_scores": overall_mid_dict,
-        "deltas": deltas,
-        "top_segments": top_segments,
-        "questions_used_full": questions_used_full,
-        "questions_used_codes": questions_used_codes
-    }
+        # 문항 추출
+        try:
+            questions_used_full, questions_used_codes = extract_questions_used(spec, df, df_filtered)
+        except Exception:
+            questions_used_full, questions_used_codes = [], []
 
-    # 그룹 비교 통계
-    extra_group_stats = None
-    if gb and gb in df_filtered.columns:
-        extra_group_stats = compare_midcategory_by_group(df_filtered, gb)
+        if questions_used_codes:
+            seen_codes = []
+            unique_codes = []
+            for c in questions_used_codes:
+                if c not in seen_codes:
+                    seen_codes.append(c)
+                    unique_codes.append(c)
+            st.markdown("**참고한 문항 (문항번호):** " + ", ".join(unique_codes))
 
+        # 중분류 지표
+        overall_mid_scores = compute_midcategory_scores(df_filtered)
+        overall_mid_dict = {k: float(v) for k, v in overall_mid_scores.items()} if not overall_mid_scores.empty else {}
+        global_mid_scores = compute_midcategory_scores(df)
+        deltas = {k: overall_mid_dict.get(k, 0) - float(global_mid_scores.get(k, overall_mid_dict.get(k, 0))) for k in overall_mid_dict}
 
-    # 설명 생성
-    explanation = generate_explanation_from_spec(df_filtered, spec, computed_metrics, extra_group_stats=extra_group_stats)
-    render_insight_card("자연어 기반 설명", explanation, key="nlq-insight")
+        # 상위 세그먼트 (groupby 기준)
+        top_segments = []
+        gb = spec.get("groupby")
+        if gb and gb in df_filtered.columns:
+            counts = df_filtered[gb].astype(str).value_counts().nlargest(3)
+            for label, n in counts.items():
+                subset = df_filtered[df_filtered[gb].astype(str) == label]
+                profile = compute_midcategory_scores(subset)
+                top_segments.append({
+                    "label": f"{gb}={label}",
+                    "n": int(n),
+                    "profile": {k: float(v) for k, v in profile.items()}
+                })
+        else:
+            top_segments.append({
+                "label": "필터된 전체",
+                "n": len(df_filtered),
+                "profile": overall_mid_dict
+            })
+
+        computed_metrics = {
+            "overall_mid_scores": overall_mid_dict,
+            "deltas": deltas,
+            "top_segments": top_segments,
+            "questions_used_full": questions_used_full,
+            "questions_used_codes": questions_used_codes
+        }
+
+        extra_group_stats = None
+        if gb and gb in df_filtered.columns:
+            extra_group_stats = compare_midcategory_by_group(df_filtered, gb)
+
+        # 설명 생성 (기존 함수가 내부에서 카드 렌더링하므로 반환 텍스트도 캡처)
+        # 수정: generate_explanation_from_spec가 insight_card 를 자체적으로 렌더링하므로, 
+        # 여기서는 그 호출 결과를 텍스트로 별도 얻는 wrapper가 필요한 경우 아래처럼 분리해두면 좋음.
+        explanation_text = None
+        try:
+            # 임시로 기존 generate_explanation_from_spec을 그대로 쓰되, 렌더링 텍스트도 얻도록 약간 변형 필요
+            # 아래는 기존을 호출하여 카드에 보여주는 방식 유지
+            explanation_text, used_model = build_explanation_from_spec(spec, computed_metrics, extra_group_stats=extra_group_stats)
+            render_explanation_from_spec(f"GPT 생성형 해석 ({used_model})", explanation_text, model=used_model, key=f"nlq-insight-{q_hash}")
+
+      
+        except Exception as e:
+            logging.warning(f"설명 생성 실패: {e}")
+            explanation_text = f"설명 생성 실패: {e}"
+
+        # 캐시에 저장
+        st.session_state[cache_key] = {
+            "spec": spec,
+            "computed_metrics": computed_metrics,
+            "extra_group_stats": extra_group_stats,
+            "explanation_text": explanation_text
+        }
+
+    # (선택적으로) 추가 요약 / 다음 행동 제안 박스
+    st.markdown("---")
+    st.markdown("### 다음에 할 수 있는 것들")
+    st.markdown(
+        "- 이 스펙을 기반으로 상세한 비교 시각화를 요청하거나\n"
+        "- 특정 조합/중분류에 집중한 drill-down 질의를 이어갈 수 있습니다.\n"
+        "- 잘못 파싱된 부분이 보이면 위의 스펙을 직접 수정한 뒤 다시 실행하세요."
+    )
 
 
 
@@ -2462,4 +2789,4 @@ elif mode == "자연어 질의":
     st.markdown("예시: '혼자 이용하는 사람들의 연령대 분포 보여주고 주로 가는 도서관별 중분류 만족도 강점/약점 비교해줘.'")
     question = st.text_input("자연어 질문을 입력하세요", placeholder="예: 혼자 이용자들의 주 이용 도서관별 만족도 비교하고 강점 약점 알려줘")
     if question:
-        handle_nl_question(df, question)
+        handle_nl_question_v2(df, question)
