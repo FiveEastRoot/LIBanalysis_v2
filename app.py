@@ -2750,14 +2750,43 @@ if mode == "기본 분석":
         with sub_tabs[1]:
             page_short_keyword(df)
         with sub_tabs[2]:
-            st.subheader("장문 서술형 분석 (Q9-DS-5)")
+            st.subheader("장문 서술형 분석 (Q9-DS-5) — 주제/감성 기반 심층")
             long_cols = [c for c in df.columns if "Q9-DS-5" in c]
             if not long_cols:
                 st.warning("Q9-DS-5 관련 문항을 찾을 수 없습니다.")
             else:
-                answers = df[long_cols[0]].dropna().astype(str).tolist()
-                df_long = process_answers(answers)
-                show_short_answer_keyword_analysis(df_long)
+                raw_answers = df[long_cols[0]].dropna().astype(str).tolist()
+                clean_answers = get_clean_long_responses(raw_answers)
+                st.markdown(f"원본 응답: {len(raw_answers)}개 → 의미 있는 응답: {len(clean_answers)}개")
+                if not clean_answers:
+                    st.info("분석할 내용이 없습니다.")
+                else:
+                    if st.button("1. 주제/키워드/요약 추출"):
+                        with st.spinner("주제 추출 중..."):
+                            theme_df = extract_theme_table_long(clean_answers)
+                            st.success("주제 추출 완료")
+                            st.dataframe(theme_df, use_container_width=True)
+                            st.download_button(
+                                "표1_주제_키워드_요약.xlsx 다운로드",
+                                theme_df.to_excel(index=False),
+                                file_name="표1_주제_키워드_요약.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+                    else:
+                        theme_df = None
+
+            if theme_df is not None and st.button("2. 주제별 감성 분석"):
+                with st.spinner("감성 분석 중..."):
+                    sentiment_df = extract_sentiment_table_long(clean_answers, theme_df)
+                    st.success("감성 분석 완료")
+                    st.dataframe(sentiment_df, use_container_width=True)
+                    st.download_button(
+                        "표2_주제별_감성_요약.xlsx 다운로드",
+                        sentiment_df.to_excel(index=False),
+                        file_name="표2_주제별_감성_요약.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+
 
     with tabs[3]:
         st.header("📊 도서관 이용양태 분석")
@@ -2882,43 +2911,7 @@ elif mode == "심화 분석":
         st.markdown("#### 상세 데이터")
         st.dataframe(df_mean)
     with tabs[2]:
-        st.subheader("장문 서술형 분석 (Q9-DS-5) — 주제/감성 기반 심층")
-        long_cols = [c for c in df.columns if "Q9-DS-5" in c]
-        if not long_cols:
-            st.warning("Q9-DS-5 관련 문항을 찾을 수 없습니다.")
-        else:
-            raw_answers = df[long_cols[0]].dropna().astype(str).tolist()
-            clean_answers = get_clean_long_responses(raw_answers)
-            st.markdown(f"원본 응답: {len(raw_answers)}개 → 의미 있는 응답: {len(clean_answers)}개")
-            if not clean_answers:
-                st.info("분석할 내용이 없습니다.")
-            else:
-                if st.button("1. 주제/키워드/요약 추출"):
-                    with st.spinner("주제 추출 중..."):
-                        theme_df = extract_theme_table_long(clean_answers)
-                        st.success("주제 추출 완료")
-                        st.dataframe(theme_df, use_container_width=True)
-                        st.download_button(
-                            "표1_주제_키워드_요약.xlsx 다운로드",
-                            theme_df.to_excel(index=False),
-                            file_name="표1_주제_키워드_요약.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
-                else:
-                    theme_df = None
-
-                if theme_df is not None and st.button("2. 주제별 감성 분석"):
-                    with st.spinner("감성 분석 중..."):
-                        sentiment_df = extract_sentiment_table_long(clean_answers, theme_df)
-                        st.success("감성 분석 완료")
-                        st.dataframe(sentiment_df, use_container_width=True)
-                        st.download_button(
-                            "표2_주제별_감성_요약.xlsx 다운로드",
-                            sentiment_df.to_excel(index=False),
-                            file_name="표2_주제별_감성_요약.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
-
+        page_segment_analysis(df)
         
 
 elif mode == "전략 인사이트(기본)":
