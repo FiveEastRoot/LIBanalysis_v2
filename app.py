@@ -2577,7 +2577,7 @@ st.set_page_config(
     layout="wide"
 )
 
-mode = st.sidebar.radio("분석 모드", ["기본 분석", "심화 분석", "전략 인사이트(기본)", "자연어 질의"])
+mode = st.sidebar.radio("분석 모드", ["기본 분석", "심화 분석", "전략 인사이트(기본)"])
 
 uploaded = st.file_uploader("📂 엑셀(.xlsx) 파일 업로드", type=["xlsx"])
 if not uploaded:
