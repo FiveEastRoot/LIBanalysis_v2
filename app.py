@@ -1003,14 +1003,19 @@ def extract_sentiment_table(responses, theme_df, batch_size=50):
         if not batch:
             continue
         messages = make_sentiment_messages(batch, theme_df)
-        resp = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            temperature=0.1,
-            max_tokens=900
-        )
-        content = resp['choices'][0]['message']['content'].strip()
-        print("LLM 감성 출력 (디버그):\n", content)  # 형식 확인용
+        try:
+            resp = openai.ChatCompletion.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                temperature=0.1,
+                max_tokens=900
+            )
+            content = resp['choices'][0]['message']['content'].strip()
+        except Exception as e:
+            logging.warning(f"LLM 호출 실패: {e}")
+            continue
+
+        print("LLM 감성 출력 (디버그):\n", content)
         all_tables.append(content)
 
     def table_to_df(table_text):
@@ -1020,14 +1025,18 @@ def extract_sentiment_table(responses, theme_df, batch_size=50):
             parts = [p.strip() for p in line.strip().split("|")[1:-1]]
             if len(parts) == 3:
                 records.append(parts)
+        if not records:
+            return pd.DataFrame(columns=['주제명', '감성', '표현 양상 요약'])
         return pd.DataFrame(records, columns=['주제명', '감성', '표현 양상 요약'])
 
     if all_tables:
-        result_df = pd.concat([table_to_df(tbl) for tbl in all_tables], ignore_index=True)
+        dfs = [table_to_df(tbl) for tbl in all_tables]
+        result_df = pd.concat(dfs, ignore_index=True)
         result_df = result_df.drop_duplicates(subset=["주제명", "감성"]).reset_index(drop=True)
     else:
         result_df = pd.DataFrame(columns=['주제명', '감성', '표현 양상 요약'])
     return result_df
+
 
 
 # ---------- 자연어 질의  인사이트 파이프라인 ----------
