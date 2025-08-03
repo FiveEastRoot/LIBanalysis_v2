@@ -1204,13 +1204,25 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
     spec = parse_nl_query_to_spec_v2(question)
     st.markdown("### 파싱된 스펙 (수정 가능)")
     with st.expander("스펙 상세 및 수동 수정", expanded=True):
-        # chart
+        # 안전하게 chart 값을 하나의 scalar로 맞추기
+        current_chart = spec.get("chart")
+        if isinstance(current_chart, list):
+            current_chart = current_chart[0] if current_chart else None
+        if current_chart not in [None, "bar", "line", "heatmap", "radar", "delta_bar", "grouped_bar"]:
+            current_chart = None
+
         chart_options = [None, "bar", "line", "heatmap", "radar", "delta_bar", "grouped_bar"]
-        spec["chart"] = st.selectbox("차트 유형 (chart)", spec.get("chart"), options=chart_options, format_func=lambda x: x if x else "없음")
-        # x, y, groupby
-        spec["x"] = st.text_input("x 축 / 주요 축", value=spec.get("x") or "")
-        spec["y"] = st.text_input("y 축 (필요시)", value=spec.get("y") or "")
-        spec["groupby"] = st.text_input("비교 기준 (groupby)", value=spec.get("groupby") or "")
+        # selectbox: options 리스트를 첫번째로 주고, index를 현재값 위치로 설정
+        default_index = chart_options.index(current_chart) if current_chart in chart_options else 0
+        chosen = st.selectbox(
+            "차트 유형 (chart)",
+            chart_options,
+            index=default_index,
+            format_func=lambda x: x if x else "없음",
+            key=f"nlq_chart_{q_hash}"
+        )
+        spec["chart"] = chosen
+
 
         # filters: editable list
         st.markdown("필터 조건 (여러 개 허용)")
