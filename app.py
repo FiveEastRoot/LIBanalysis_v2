@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import re
 import io
+import os
 from PIL import Image
 import openai
 import streamlit.components.v1 as components 
