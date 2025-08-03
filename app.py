@@ -257,30 +257,34 @@ def make_theme_messages(batch: list[str]) -> list[dict]:
         {"role": "user", "content": user_block + "\n\n[결과 표]\n| 주제명 | 대표 키워드 | 요약 |"}
     ]
 
+def df_to_markdown_manual(df: pd.DataFrame) -> str:
+    cols = list(df.columns)
+    # 헤더
+    header = "| " + " | ".join(cols) + " |"
+    separator = "| " + " | ".join(["---"] * len(cols)) + " |"
+    # 행들
+    rows = []
+    for _, r in df.iterrows():
+        # 줄바꿈 제거, 너무 길면 줄임 처리 가능
+        cells = [str(r[c]).replace("\n", " ").strip() for c in cols]
+        row = "| " + " | ".join(cells) + " |"
+        rows.append(row)
+    return "\n".join([header, separator] + rows)
+
+
 def make_sentiment_messages(batch: list[str], theme_df: pd.DataFrame) -> list[dict]:
     system_content = (
         "당신은 도서관 자유서술 응답을 주제별로 감성(긍정/부정/중립) 분류하고, "
         "각 주제+감성 조합에 대해 특징적인 표현 양상을 200자 내외로 요약하는 분석가입니다. "
-        "다음을 반드시 지키세요:\n"
-        "1. 주제명은: 공간 및 시설, 자료 확충, 프로그램 다양화, 운영 및 시스템, 직원 및 응대, 기타 중 하나만 사용.\n"
-        "2. 감성은 '긍정', '부정', '중립'만 사용.\n"
-        "3. 출력은 아래처럼 마크다운 표(헤더+구분선 포함)로만 제공합니다:\n"
-        "| 주제명 | 감성 | 표현 양상 요약 |\n"
-        "| --- | --- | --- |"
+        "감성은 '긍정', '부정', '중립'만 사용하며 출력은 마크다운 표로 아래처럼:\n"
+        "| 주제명 | 감성 | 표현 양상 요약 |"
     )
     user_block = "[실제 입력 응답]\n" + "\n".join(batch)
-    theme_table_md = theme_df.to_markdown(index=False)
-    user_content = (
-        user_block
-        + "\n\n[주제 테이블]\n"
-        + theme_table_md
-        + "\n\n[결과 표]\n"
-        + "| 주제명 | 감성 | 표현 양상 요약 |\n"
-        + "| --- | --- | --- |"
-    )
+    theme_table_md = df_to_markdown_manual(theme_df)
+    combined = user_block + "\n\n[주제 테이블]\n" + theme_table_md
     return [
         {"role": "system", "content": system_content},
-        {"role": "user", "content": user_content}
+        {"role": "user", "content": combined + "\n\n[결과 표]\n| 주제명 | 감성 | 표현 양상 요약 |"}
     ]
 
 
