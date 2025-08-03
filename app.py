@@ -1189,10 +1189,16 @@ def render_explanation_from_spec(title: str, explanation_text: str, model: str, 
     # 모델 정보를 맨 앞에 붙여서 보여줌
     decorated = f"**사용 모델:** {model}\n\n{explanation_text}"
     render_insight_card(title, decorated, key=key)
-
+def normalize_chart_choice(raw_chart):
+    # 안전하게 하나의 scalar로 정리
+    if isinstance(raw_chart, list):
+        return raw_chart[0] if raw_chart else None
+    if raw_chart in {None, "bar", "line", "heatmap", "radar", "delta_bar", "grouped_bar"}:
+        return raw_chart
+    return None
 
 def render_spec_chart(df_filtered: pd.DataFrame, spec: dict, q_hash: str):
-    chart = spec.get("chart")
+    chart = normalize_chart_choice(spec.get("chart"))
     gb = spec.get("groupby")
     x = spec.get("x")
 
@@ -1276,93 +1282,160 @@ def render_spec_chart(df_filtered: pd.DataFrame, spec: dict, q_hash: str):
         if fig is not None:
             st.plotly_chart(fig, use_container_width=True, key=f"nlq-default-radar-{q_hash}")
 
-def render_spec_chart(df_filtered: pd.DataFrame, spec: dict, q_hash: str):
-    chart = spec.get("chart")
-    gb = spec.get("groupby")
-    x = spec.get("x")
+def handle_nl_question_v2(df: pd.DataFrame, question: str):
+    st.markdown("## 자연어 질의 결과")
+    st.markdown(f"**원문 질의:** {question}")
 
-    st.markdown("### 자동 생성된 시각화")
+    q_hash = hashlib.sha256(question.strip().encode("utf-8")).hexdigest()
+    cache_key = f"nlq_cache_{q_hash}"
+    cached = st.session_state.get(cache_key)
 
-    if chart == "radar":
-        fig = plot_midcategory_radar(df_filtered)
-        if fig is not None:
-            st.plotly_chart(fig, use_container_width=True, key=f"nlq-radar-{q_hash}")
-        else:
-            st.warning("레이더 차트를 그릴 충분한 중분류 문항이 없습니다.")
-    elif chart == "heatmap":
-        if not gb or gb not in df_filtered.columns:
-            st.warning("히트맵은 비교 기준(groupby)이 필요합니다. groupby가 유효한지 확인하세요.")
-            return
-        midcats = list(MIDDLE_CATEGORY_MAPPING.keys())
-        group = df_filtered.groupby(df_filtered[gb].astype(str))
-        rows = []
-        for label, g in group:
-            scores = compute_midcategory_scores(g)
-            row = {mc: scores.get(mc, np.nan) for mc in midcats}
-            row[gb] = label
-            rows.append(row)
-        if not rows:
-            st.warning("groupby 기준으로 나눌 수 있는 충분한 데이터가 없습니다.")
-            return
-        heat_df = pd.DataFrame(rows).set_index(gb)[midcats]
-        fig = px.imshow(
-            heat_df,
-            text_auto=True,
-            aspect="auto",
-            color_continuous_scale="Blues",
-            title=f"{gb}별 중분류 만족도 히트맵",
-            labels=dict(x="중분류", y=gb, color="평균점수")
+    # 파싱 및 정규화
+    try:
+        spec = parse_nl_query_to_spec_v2(question)
+    except Exception as e:
+        logging.error(f"자연어 질의 파싱 실패: {e}", exc_info=True)
+        spec = {"chart": None, "x": None, "y": None, "groupby": None, "filters": [], "focus": question}
+        spec = normalize_and_validate_spec(spec, question)
+
+    st.markdown("### 파싱된 스펙 (수정 가능)")
+    with st.expander("스펙 상세 및 수동 수정", expanded=True):
+        # chart selectbox
+        current_chart = normalize_chart_choice(spec.get("chart"))
+        chart_options = [None, "bar", "line", "heatmap", "radar", "delta_bar", "grouped_bar"]
+        default_index = chart_options.index(current_chart) if current_chart in chart_options else 0
+        chosen = st.selectbox(
+            "차트 유형 (chart)",
+            chart_options,
+            index=default_index,
+            format_func=lambda x: x if x else "없음",
+            key=f"nlq_chart_{q_hash}"
         )
-        st.plotly_chart(fig, use_container_width=True, key=f"nlq-heatmap-{q_hash}")
-    elif chart in {"bar", "grouped_bar"}:
-        if x and any(x.strip().lower() == mc.strip().lower() for mc in MIDDLE_CATEGORY_MAPPING.keys()):
-            fig, tbl = plot_within_category_bar(df_filtered, x)
-            if fig is not None:
-                render_chart_and_table(fig, tbl, x, key_prefix=f"nlq-bar-{q_hash}")
-            else:
-                st.warning(f"'{x}'에 해당하는 문항이 없어 바를 그릴 수 없습니다.")
-        elif gb and gb in df_filtered.columns:
-            counts = df_filtered[gb].astype(str).value_counts().nlargest(3)
-            for label in counts.index:
-                subset = df_filtered[df_filtered[gb].astype(str) == label]
-                sub_scores = compute_midcategory_scores(subset)
-                if sub_scores.empty:
-                    continue
-                fig = go.Figure()
-                midcats = list(sub_scores.index)
-                vals = [sub_scores.get(m, 0) for m in midcats]
-                fig.add_trace(go.Scatterpolar(
-                    r=vals + [vals[0]],
-                    theta=midcats + [midcats[0]],
-                    fill=None,
-                    name=f"{gb}={label}"
-                ))
-                overall = compute_midcategory_scores(df_filtered)
-                if not overall.empty:
-                    overall_vals = [overall.get(m, 0) for m in midcats]
-                    fig.add_trace(go.Scatterpolar(
-                        r=overall_vals + [overall_vals[0]],
-                        theta=midcats + [midcats[0]],
-                        fill=None,
-                        name="전체 평균",
-                        line=dict(dash="dash")
-                    ))
-                fig.update_layout(
-                    polar=dict(radialaxis=dict(range=[0, 100])),
-                    title=f"{gb}={label} vs 전체 평균",
-                    height=400,
-                )
-                st.plotly_chart(fig, use_container_width=True, key=f"nlq-grouped-bar-{q_hash}-{label}")
-        else:
-            st.info("bar/grouped_bar 시각화를 만들려면 x 또는 groupby가 필요합니다.")
+        spec["chart"] = normalize_chart_choice(chosen)
+
+        # filters
+        st.markdown("필터 조건 (여러 개 허용)")
+        filters = spec.get("filters", [])
+        new_filters = []
+        for i, f in enumerate(filters):
+            cols = st.columns([3,2,3,1])
+            with cols[0]:
+                col_name = st.text_input(f"필터 {i+1} 컬럼(col)", value=f.get("col",""), key=f"nlq_filter_col_{q_hash}_{i}")
+            with cols[1]:
+                op = st.selectbox(f"연산자(op) {i+1}", options=["contains","==","in"], index=["contains","==","in"].index(f.get("op","contains")) if f.get("op") in ["contains","==","in"] else 0, key=f"nlq_filter_op_{q_hash}_{i}")
+            with cols[2]:
+                val = st.text_input(f"값(value) {i+1}", value=str(f.get("value","")), key=f"nlq_filter_value_{q_hash}_{i}")
+            with cols[3]:
+                remove = st.checkbox("삭제", key=f"nlq_filter_rm_{q_hash}_{i}")
+            if not remove:
+                parsed_val = [v.strip() for v in val.split(",")] if op == "in" and "," in val else val
+                new_filters.append({"col": col_name, "op": op, "value": parsed_val})
+        if st.button("필터 추가", key=f"nlq_filter_add_{q_hash}"):
+            new_filters.append({"col":"", "op":"contains", "value":""})
+        spec["filters"] = new_filters
+
+        # focus
+        spec["focus"] = st.text_input("질의 요약 (focus)", value=spec.get("focus") or question, key=f"nlq_focus_{q_hash}")
+
+        # 재검증
+        spec = normalize_and_validate_spec(spec, question)
+
+        # 요약 표시
+        readable = []
+        if spec.get("chart"):
+            readable.append(f"차트: {spec['chart']}")
+        if spec.get("x"):
+            readable.append(f"x: {spec['x']}")
+        if spec.get("y"):
+            readable.append(f"y: {spec['y']}")
+        if spec.get("groupby"):
+            readable.append(f"groupby: {spec['groupby']}")
+        if spec.get("filters"):
+            filt_strs = [f"{f['col']} {f['op']} {f['value']}" for f in spec["filters"]]
+            readable.append(f"필터: {'; '.join(filt_strs)}")
+        readable.append(f"focus: {spec.get('focus')}")
+        st.markdown("**요약된 스펙 해석:** " + " | ".join(readable))
+
+    use_cache = cached and cached.get("spec") == spec
+    if use_cache:
+        st.info("이전 동일 질의/스펙 결과를 재사용합니다.")
+        computed_metrics = cached["computed_metrics"]
+        extra_group_stats = cached.get("extra_group_stats")
+        explanation_text = cached["explanation_text"]
+        used_model = cached.get("used_model", "unknown")
+        render_explanation_from_spec(f"재사용된 GPT 생성형 해석 ({used_model})", explanation_text, model=used_model, key=f"nlq-insight-cached-{q_hash}")
+        # 필터는 그대로 쓰되 시각화는 항상 최신 spec/filtered로
+        df_filtered = apply_filters(df, spec.get("filters", []))
     else:
-        st.info("차트 유형이 없거나 인식되지 않았습니다. 기본 요약 차트(레이더)를 보여줍니다.")
-        fig = plot_midcategory_radar(df_filtered)
-        if fig is not None:
-            st.plotly_chart(fig, use_container_width=True, key=f"nlq-default-radar-{q_hash}")
+        df_filtered = apply_filters(df, spec.get("filters", []))
+        if df_filtered.empty:
+            st.warning("필터 적용 결과 데이터가 없습니다. 조건을 조정해보세요.")
+            return
 
+        try:
+            questions_used_full, questions_used_codes = extract_questions_used(spec, df, df_filtered)
+        except Exception:
+            questions_used_full, questions_used_codes = [], []
 
+        if questions_used_codes:
+            unique_codes = []
+            seen = set()
+            for c in questions_used_codes:
+                if c not in seen:
+                    seen.add(c)
+                    unique_codes.append(c)
+            st.markdown("**참고한 문항 (문항번호):** " + ", ".join(unique_codes))
 
+        overall_mid_scores = compute_midcategory_scores(df_filtered)
+        overall_mid_dict = {k: float(v) for k, v in overall_mid_scores.items()} if not overall_mid_scores.empty else {}
+        global_mid_scores = compute_midcategory_scores(df)
+        deltas = {k: overall_mid_dict.get(k, 0) - float(global_mid_scores.get(k, overall_mid_dict.get(k, 0))) for k in overall_mid_dict}
+
+        top_segments = []
+        gb = spec.get("groupby")
+        if gb and gb in df_filtered.columns:
+            counts = df_filtered[gb].astype(str).value_counts().nlargest(3)
+            for label, n in counts.items():
+                subset = df_filtered[df_filtered[gb].astype(str) == label]
+                profile = compute_midcategory_scores(subset)
+                top_segments.append({
+                    "label": f"{gb}={label}",
+                    "n": int(n),
+                    "profile": {k: float(v) for k, v in profile.items()}
+                })
+        else:
+            top_segments.append({
+                "label": "필터된 전체",
+                "n": len(df_filtered),
+                "profile": overall_mid_dict
+            })
+
+        computed_metrics = {
+            "overall_mid_scores": overall_mid_dict,
+            "deltas": deltas,
+            "top_segments": top_segments,
+            "questions_used_full": questions_used_full,
+            "questions_used_codes": questions_used_codes
+        }
+
+        extra_group_stats = None
+        if gb and gb in df_filtered.columns:
+            extra_group_stats = compare_midcategory_by_group(df_filtered, gb)
+
+        explanation_text, used_model = build_explanation_from_spec(spec, computed_metrics, extra_group_stats=extra_group_stats)
+        render_explanation_from_spec(f"GPT 생성형 해석 ({used_model})", explanation_text, model=used_model, key=f"nlq-insight-{q_hash}")
+
+        st.session_state[cache_key] = {
+            "spec": spec,
+            "computed_metrics": computed_metrics,
+            "extra_group_stats": extra_group_stats,
+            "explanation_text": explanation_text,
+            "used_model": used_model
+        }
+
+    # 차트는 캐시 여부와 관계없이 항상 최신 spec/filtered로 그림
+    if 'df_filtered' in locals():
+        render_spec_chart(df_filtered, spec, q_hash)
 
 
 # ─────────────────────────────────────────────────────
