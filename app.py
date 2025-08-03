@@ -232,27 +232,43 @@ def build_common_overall_insight_prompt(midcat_scores: dict, within_deviations: 
     strengths = []
     weaknesses = []
     for mid, series in within_deviations.items():
-        if series is None or series.empty:
+        if series is None:
             continue
-        dev = series.dropna()
+        # 만약 시리즈면, 정렬해서 상/하위 항목 뽑기
+        try:
+            dev = series.dropna()
+        except Exception:
+            continue
         if dev.empty:
             continue
         sorted_series = dev.sort_values(ascending=False)
-        top_pos = sorted_series.head(1)
-        top_neg = sorted_series.tail(1)
-        strengths.append(f"{mid}의 '{top_pos.index[0]}' +{top_pos.iloc[0]:.1f}")
-        weaknesses.append(f"{mid}의 '{top_neg.index[0]}' {top_neg.iloc[0]:.1f}")
-    abc_pivot = abc_df.pivot(index="중분류", columns="문항유형", values="평균값")
+        top_pos_label = sorted_series.index[0]
+        top_pos_val = sorted_series.iloc[0]
+        top_neg_label = sorted_series.index[-1]
+        top_neg_val = sorted_series.iloc[-1]
+        strengths.append(f"{mid}의 '{top_pos_label}' +{top_pos_val:.1f}")
+        weaknesses.append(f"{mid}의 '{top_neg_label}' {top_neg_val:.1f}")
+    # ABC 비교 요약 문자열
     abc_lines = []
-    for mid in abc_pivot.index:
-        vals = abc_pivot.loc[mid].to_dict()
-        # 존재하지 않을 수 있으니 안전하게
-        eval_val = vals.get("서비스 평가", None)
-        effect_val = vals.get("서비스 효과", None)
-        sat_val = vals.get("전반적 만족도", None)
-        abc_lines.append(
-            f"{mid}: 평가 {eval_val:.1f if eval_val is not None else 'N/A'}, 효과 {effect_val:.1f if effect_val is not None else 'N/A'}, 만족도 {sat_val:.1f if sat_val is not None else 'N/A'}"
-        )
+    for _, row in abc_df.iterrows():
+        mid = row.get("중분류", "")
+        eval_val = row.get("평균값") if row.get("문항유형") == "서비스 평가" else None
+        # 사실 pivot한 값이 더 정확하니 안전하게 pivot 방식으로도 뽑을 수 있게
+    # 보다 명확하게 A/B/C를 정리
+    try:
+        abc_pivot = abc_df.pivot(index="중분류", columns="문항유형", values="평균값")
+    except Exception:
+        abc_pivot = pd.DataFrame()
+    abc_lines = []
+    if not abc_pivot.empty:
+        for mid in abc_pivot.index:
+            eval_val = abc_pivot.loc[mid].get("서비스 평가", None)
+            effect_val = abc_pivot.loc[mid].get("서비스 효과", None)
+            sat_val = abc_pivot.loc[mid].get("전반적 만족도", None)
+            eval_str = f"{eval_val:.1f}" if pd.notna(eval_val) else "N/A"
+            effect_str = f"{effect_val:.1f}" if pd.notna(effect_val) else "N/A"
+            sat_str = f"{sat_val:.1f}" if pd.notna(sat_val) else "N/A"
+            abc_lines.append(f"{mid}: 평가 {eval_str}, 효과 {effect_str}, 만족도 {sat_str}")
     abc_str = "\n".join(abc_lines)
 
     prompt = f"""
@@ -274,6 +290,7 @@ def build_common_overall_insight_prompt(midcat_scores: dict, within_deviations: 
 제한: 숫자는 한 자리 소수, 비즈니스 톤, 소제목 포함, 전체 700~1100자. 출력은 텍스트만.
 """
     return prompt.strip()
+
 
 def build_area_insight_prompt(midcat_scores: dict, abc_df: pd.DataFrame) -> str:
     midcat_str = ", ".join(f"{k} {v:.1f}" for k, v in midcat_scores.items())
