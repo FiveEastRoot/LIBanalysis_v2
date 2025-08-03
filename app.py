@@ -2590,7 +2590,7 @@ st.markdown(
         text-align: center;
         border-bottom: 2px solid #eee;
     ">
-        <h1 style="margin: 0; font-size: 2.5rem; font-weight: bold;">LIBSCOPE</h1>
+        <h1 style="margin: 0; font-size: 3rem; font-weight: bold;">LIBSCOPE</h1>
     </div>
     """,
     unsafe_allow_html=True
