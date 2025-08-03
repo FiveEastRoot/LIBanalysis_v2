@@ -1272,19 +1272,37 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
 
         top_segments = []
         gb = spec.get("groupby")
-        if gb and gb in df_filtered.columns:
-            counts = df_filtered[gb].astype(str).value_counts().nlargest(3)
+        # groupby가 리스트면 그대로, 아니면 단일로 리스트화 (None이면 빈 리스트)
+        if isinstance(gb, list):
+            gb_list = gb
+        elif gb:
+            gb_list = [gb]
+        else:
+            gb_list = []
+
+        # 유효한 groupby 컬럼만 남기기
+        valid_gb = [g for g in gb_list if g in df_filtered.columns]
+
+        if valid_gb:
+            # 복수 groupby면 조합 라벨 생성
+            def make_combo_label(row):
+                return " | ".join(str(row[g]) for g in valid_gb)
+
+            df_filtered["_gb_combined"] = df_filtered.apply(make_combo_label, axis=1)
+            counts = df_filtered["_gb_combined"].value_counts().nlargest(3)
             for label, n in counts.items():
-                subset = df_filtered[df_filtered[gb].astype(str) == label]
+                subset = df_filtered[df_filtered["_gb_combined"] == label]
                 profile = compute_midcategory_scores(subset)
                 top_segments.append({
-                    "label": f"{gb}={label}",
+                    "label": label,
                     "n": int(n),
                     "profile": {k: float(v) for k, v in profile.items()}
                 })
+            # 임시 컬럼 정리
+            df_filtered.drop(columns=["_gb_combined"], inplace=True)
         else:
             top_segments.append({
-                "label": "전체",
+                "label": "필터된 전체",
                 "n": len(df_filtered),
                 "profile": overall_mid_dict
             })
@@ -1295,11 +1313,13 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
             "top_segments": top_segments,
             "questions_used_full": questions_used_full,
             "questions_used_codes": questions_used_codes
-        }
+    }
 
-        extra_group_stats = None
-        if gb and gb in df_filtered.columns:
-            extra_group_stats = compare_midcategory_by_group(df_filtered, gb)
+    extra_group_stats = None
+    # groupby가 단일이고 컬럼으로 존재할 때만 비교 통계 계산
+    if isinstance(gb, str) and gb in df_filtered.columns:
+        extra_group_stats = compare_midcategory_by_group(df_filtered, gb)
+
 
         explanation_text, used_model = build_explanation_from_spec(spec, computed_metrics, extra_group_stats=extra_group_stats)
         render_explanation_from_spec(f"GPT 생성형 해석 ({used_model})", explanation_text, model=used_model, key=f"nlq-insight-{q_hash}")
