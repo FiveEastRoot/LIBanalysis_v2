@@ -1195,12 +1195,12 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
     cache_key = f"nlq_cache_{q_hash}"
     cached = st.session_state.get(cache_key)
 
-    # 파싱 및 정규화 (차트/필터 UI 제거)
+    # 파싱 및 정규화 (차트/필터 관련 제거)
     try:
         spec = parse_nl_query_to_spec_v2(question)
     except Exception as e:
         logging.error(f"자연어 질의 파싱 실패: {e}", exc_info=True)
-        spec = {"chart": None, "x": None, "y": None, "groupby": None, "filters": [], "focus": question}
+        spec = {"x": None, "y": None, "groupby": None, "focus": question, "chart": None, "filters": []}
         spec = normalize_and_validate_spec(spec, question)
         spec["filters"] = []
 
@@ -1209,7 +1209,6 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
         # focus만 노출
         spec["focus"] = st.text_input("질의 요약 (focus)", value=spec.get("focus") or question, key=f"nlq_focus_{q_hash}")
 
-        # groupby / x / y는 필요하다면 보여줄 수 있지만 차트/필터 관련은 뺌
         if spec.get("groupby"):
             st.markdown(f"- 비교 기준 (groupby): {spec['groupby']}")
         if spec.get("x"):
@@ -1224,7 +1223,7 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
         spec = normalize_and_validate_spec(spec, question)
         spec["filters"] = []  # 다시 보장
 
-        # 요약 표시 (chart / filters 생략)
+        # 요약 표시
         readable = []
         if spec.get("x"):
             readable.append(f"x: {spec['x']}")
@@ -1237,15 +1236,16 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
 
     use_cache = cached and cached.get("spec") == spec
     if use_cache:
+        logging.info("캐시된 결과 사용")
         st.info("이전 동일 질의/스펙 결과를 재사용합니다.")
         computed_metrics = cached["computed_metrics"]
         extra_group_stats = cached.get("extra_group_stats")
         explanation_text = cached["explanation_text"]
         used_model = cached.get("used_model", "unknown")
         render_explanation_from_spec(f"재사용된 GPT 생성형 해석 ({used_model})", explanation_text, model=used_model, key=f"nlq-insight-cached-{q_hash}")
-        df_filtered = df  # 필터 없이 전체 사용
+        df_filtered = df  # 필터 없이 전체
     else:
-        df_filtered = df  # 필터 없이 전체 사용
+        df_filtered = df  # 필터 없이 전체
 
         if df_filtered.empty:
             st.warning("데이터가 없습니다.")
@@ -1268,11 +1268,14 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
         overall_mid_scores = compute_midcategory_scores(df_filtered)
         overall_mid_dict = {k: float(v) for k, v in overall_mid_scores.items()} if not overall_mid_scores.empty else {}
         global_mid_scores = compute_midcategory_scores(df)
-        deltas = {k: overall_mid_dict.get(k, 0) - float(global_mid_scores.get(k, overall_mid_dict.get(k, 0))) for k in overall_mid_dict}
+        deltas = {
+            k: overall_mid_dict.get(k, 0) - float(global_mid_scores.get(k, overall_mid_dict.get(k, 0)))
+            for k in overall_mid_dict
+        }
 
         top_segments = []
         gb = spec.get("groupby")
-        # groupby가 리스트면 그대로, 아니면 단일로 리스트화 (None이면 빈 리스트)
+        # groupby 리스트 처리
         if isinstance(gb, list):
             gb_list = gb
         elif gb:
@@ -1280,14 +1283,11 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
         else:
             gb_list = []
 
-        # 유효한 groupby 컬럼만 남기기
         valid_gb = [g for g in gb_list if g in df_filtered.columns]
 
         if valid_gb:
-            # 복수 groupby면 조합 라벨 생성
             def make_combo_label(row):
                 return " | ".join(str(row[g]) for g in valid_gb)
-
             df_filtered["_gb_combined"] = df_filtered.apply(make_combo_label, axis=1)
             counts = df_filtered["_gb_combined"].value_counts().nlargest(3)
             for label, n in counts.items():
@@ -1298,11 +1298,10 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
                     "n": int(n),
                     "profile": {k: float(v) for k, v in profile.items()}
                 })
-            # 임시 컬럼 정리
             df_filtered.drop(columns=["_gb_combined"], inplace=True)
         else:
             top_segments.append({
-                "label": "필터된 전체",
+                "label": "전체 데이터",
                 "n": len(df_filtered),
                 "profile": overall_mid_dict
             })
@@ -1313,15 +1312,23 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
             "top_segments": top_segments,
             "questions_used_full": questions_used_full,
             "questions_used_codes": questions_used_codes
-    }
+        }
 
-    extra_group_stats = None
-    # groupby가 단일이고 컬럼으로 존재할 때만 비교 통계 계산
-    if isinstance(gb, str) and gb in df_filtered.columns:
-        extra_group_stats = compare_midcategory_by_group(df_filtered, gb)
+        extra_group_stats = None
+        if isinstance(gb, str) and gb in df_filtered.columns:
+            extra_group_stats = compare_midcategory_by_group(df_filtered, gb)
 
+        # explanation 생성/렌더링 (항상 수행)
+        try:
+            explanation_text, used_model = build_explanation_from_spec(spec, computed_metrics, extra_group_stats=extra_group_stats)
+        except Exception as e:
+            logging.error("build_explanation_from_spec 실패", exc_info=True)
+            explanation_text = f"GPT 해석 생성에 실패했습니다: {e}"
+            used_model = "error"
 
-        explanation_text, used_model = build_explanation_from_spec(spec, computed_metrics, extra_group_stats=extra_group_stats)
+        if not explanation_text:
+            explanation_text = "(해석이 비어 있습니다.)"
+
         render_explanation_from_spec(f"GPT 생성형 해석 ({used_model})", explanation_text, model=used_model, key=f"nlq-insight-{q_hash}")
 
         st.session_state[cache_key] = {
@@ -1332,7 +1339,6 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
             "used_model": used_model
         }
 
-    # 차트 없음: render_spec_chart 호출 제거
 
 
 # ─────────────────────────────────────────────────────
