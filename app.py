@@ -1450,7 +1450,7 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
                 fig = plot_midcategory_radar(df_filtered)
                 if fig is not None:
                     st.plotly_chart(fig, use_container_width=True, key=f"nlq-default-radar-{q_hash}")
-            render_spec_chart(df_filtered, spec, q_hash)
+        render_spec_chart(df_filtered, spec, q_hash)
         
 
 
