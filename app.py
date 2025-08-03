@@ -1224,93 +1224,7 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
         )
         spec["chart"] = chosen
 
-    def render_spec_chart(df_filtered: pd.DataFrame, spec: dict, q_hash: str):
-        chart = spec.get("chart")
-        gb = spec.get("groupby")
-        x = spec.get("x")
 
-        st.markdown("### 자동 생성된 시각화")
-
-        if chart == "radar":
-            fig = plot_midcategory_radar(df_filtered)
-            if fig is not None:
-                st.plotly_chart(fig, use_container_width=True, key=f"nlq-radar-{q_hash}")
-            else:
-                st.warning("레이더 차트를 그릴 충분한 중분류 문항이 없습니다.")
-        elif chart == "heatmap":
-            if not gb or gb not in df_filtered.columns:
-                st.warning("히트맵은 비교 기준(groupby)이 필요합니다. groupby가 유효한지 확인하세요.")
-                return
-            # groupby별 중분류 평균 계산
-            midcats = list(MIDDLE_CATEGORY_MAPPING.keys())
-            group = df_filtered.groupby(df_filtered[gb].astype(str))
-            rows = []
-            for label, g in group:
-                scores = compute_midcategory_scores(g)
-                row = {mc: scores.get(mc, np.nan) for mc in midcats}
-                row[gb] = label
-                rows.append(row)
-            if not rows:
-                st.warning("groupby 기준으로 나눌 수 있는 충분한 데이터가 없습니다.")
-                return
-            heat_df = pd.DataFrame(rows).set_index(gb)[midcats]
-            fig = px.imshow(
-                heat_df,
-                text_auto=True,
-                aspect="auto",
-                color_continuous_scale="Blues",
-                title=f"{gb}별 중분류 만족도 히트맵",
-                labels=dict(x="중분류", y=gb, color="평균점수")
-            )
-            st.plotly_chart(fig, use_container_width=True, key=f"nlq-heatmap-{q_hash}")
-        elif chart in {"bar", "grouped_bar"}:
-            # 간단 fallback: x가 중분류면 항목별 바, 아니면 groupby 기반 주요 세그먼트
-            if x and any(x.strip().lower() == mc.strip().lower() for mc in MIDDLE_CATEGORY_MAPPING.keys()):
-                fig, tbl = plot_within_category_bar(df_filtered, x)
-                if fig is not None:
-                    render_chart_and_table(fig, tbl, x, key_prefix=f"nlq-bar-{q_hash}")
-                else:
-                    st.warning(f"'{x}'에 해당하는 문항이 없어 바를 그릴 수 없습니다.")
-            elif gb and gb in df_filtered.columns:
-                # groupby별 전체 중분류 레이더 요약으로 대체 (간단 비교)
-                counts = df_filtered[gb].astype(str).value_counts().nlargest(3)
-                for label in counts.index:
-                    subset = df_filtered[df_filtered[gb].astype(str) == label]
-                    sub_scores = compute_midcategory_scores(subset)
-                    if sub_scores.empty:
-                        continue
-                    fig = go.Figure()
-                    midcats = list(sub_scores.index)
-                    vals = [sub_scores.get(m, 0) for m in midcats]
-                    fig.add_trace(go.Scatterpolar(
-                        r=vals + [vals[0]],
-                        theta=midcats + [midcats[0]],
-                        fill=None,
-                        name=f"{gb}={label}"
-                    ))
-                    overall = compute_midcategory_scores(df)
-                    if not overall.empty:
-                        overall_vals = [overall.get(m, 0) for m in midcats]
-                        fig.add_trace(go.Scatterpolar(
-                            r=overall_vals + [overall_vals[0]],
-                            theta=midcats + [midcats[0]],
-                            fill=None,
-                            name="전체 평균",
-                            line=dict(dash="dash")
-                        ))
-                    fig.update_layout(
-                        polar=dict(radialaxis=dict(range=[0, 100])),
-                        title=f"{gb}={label} vs 전체 평균",
-                        height=400,
-                    )
-                    st.plotly_chart(fig, use_container_width=True, key=f"nlq-grouped-bar-{q_hash}-{label}")
-            else:
-                st.info("bar/grouped_bar 시각화를 만들려면 x 또는 groupby가 필요합니다.")
-        else:
-            st.info("차트 유형이 없거나 인식되지 않았습니다. 기본 요약 차트(레이더)를 보여줍니다.")
-            fig = plot_midcategory_radar(df_filtered)
-            if fig is not None:
-                st.plotly_chart(fig, use_container_width=True, key=f"nlq-default-radar-{q_hash}")
 
 
         # filters: editable list
@@ -1449,10 +1363,95 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
             "extra_group_stats": extra_group_stats,
             "explanation_text": explanation_text
         }
+        def render_spec_chart(df_filtered: pd.DataFrame, spec: dict, q_hash: str):
+            chart = spec.get("chart")
+            gb = spec.get("groupby")
+            x = spec.get("x")
 
-    # 시각화 분기 실행
-    render_spec_chart(df_filtered, spec, q_hash)
+            st.markdown("### 자동 생성된 시각화")
 
+            if chart == "radar":
+                fig = plot_midcategory_radar(df_filtered)
+                if fig is not None:
+                    st.plotly_chart(fig, use_container_width=True, key=f"nlq-radar-{q_hash}")
+                else:
+                    st.warning("레이더 차트를 그릴 충분한 중분류 문항이 없습니다.")
+            elif chart == "heatmap":
+                if not gb or gb not in df_filtered.columns:
+                    st.warning("히트맵은 비교 기준(groupby)이 필요합니다. groupby가 유효한지 확인하세요.")
+                    return
+                # groupby별 중분류 평균 계산
+                midcats = list(MIDDLE_CATEGORY_MAPPING.keys())
+                group = df_filtered.groupby(df_filtered[gb].astype(str))
+                rows = []
+                for label, g in group:
+                    scores = compute_midcategory_scores(g)
+                    row = {mc: scores.get(mc, np.nan) for mc in midcats}
+                    row[gb] = label
+                    rows.append(row)
+                if not rows:
+                    st.warning("groupby 기준으로 나눌 수 있는 충분한 데이터가 없습니다.")
+                    return
+                heat_df = pd.DataFrame(rows).set_index(gb)[midcats]
+                fig = px.imshow(
+                    heat_df,
+                    text_auto=True,
+                    aspect="auto",
+                    color_continuous_scale="Blues",
+                    title=f"{gb}별 중분류 만족도 히트맵",
+                    labels=dict(x="중분류", y=gb, color="평균점수")
+                )
+                st.plotly_chart(fig, use_container_width=True, key=f"nlq-heatmap-{q_hash}")
+            elif chart in {"bar", "grouped_bar"}:
+                # 간단 fallback: x가 중분류면 항목별 바, 아니면 groupby 기반 주요 세그먼트
+                if x and any(x.strip().lower() == mc.strip().lower() for mc in MIDDLE_CATEGORY_MAPPING.keys()):
+                    fig, tbl = plot_within_category_bar(df_filtered, x)
+                    if fig is not None:
+                        render_chart_and_table(fig, tbl, x, key_prefix=f"nlq-bar-{q_hash}")
+                    else:
+                        st.warning(f"'{x}'에 해당하는 문항이 없어 바를 그릴 수 없습니다.")
+                elif gb and gb in df_filtered.columns:
+                    # groupby별 전체 중분류 레이더 요약으로 대체 (간단 비교)
+                    counts = df_filtered[gb].astype(str).value_counts().nlargest(3)
+                    for label in counts.index:
+                        subset = df_filtered[df_filtered[gb].astype(str) == label]
+                        sub_scores = compute_midcategory_scores(subset)
+                        if sub_scores.empty:
+                            continue
+                        fig = go.Figure()
+                        midcats = list(sub_scores.index)
+                        vals = [sub_scores.get(m, 0) for m in midcats]
+                        fig.add_trace(go.Scatterpolar(
+                            r=vals + [vals[0]],
+                            theta=midcats + [midcats[0]],
+                            fill=None,
+                            name=f"{gb}={label}"
+                        ))
+                        overall = compute_midcategory_scores(df)
+                        if not overall.empty:
+                            overall_vals = [overall.get(m, 0) for m in midcats]
+                            fig.add_trace(go.Scatterpolar(
+                                r=overall_vals + [overall_vals[0]],
+                                theta=midcats + [midcats[0]],
+                                fill=None,
+                                name="전체 평균",
+                                line=dict(dash="dash")
+                            ))
+                        fig.update_layout(
+                            polar=dict(radialaxis=dict(range=[0, 100])),
+                            title=f"{gb}={label} vs 전체 평균",
+                            height=400,
+                        )
+                        st.plotly_chart(fig, use_container_width=True, key=f"nlq-grouped-bar-{q_hash}-{label}")
+                else:
+                    st.info("bar/grouped_bar 시각화를 만들려면 x 또는 groupby가 필요합니다.")
+            else:
+                st.info("차트 유형이 없거나 인식되지 않았습니다. 기본 요약 차트(레이더)를 보여줍니다.")
+                fig = plot_midcategory_radar(df_filtered)
+                if fig is not None:
+                    st.plotly_chart(fig, use_container_width=True, key=f"nlq-default-radar-{q_hash}")
+            render_spec_chart(df_filtered, spec, q_hash)
+        
 
 
 
