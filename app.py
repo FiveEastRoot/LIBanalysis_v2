@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 import re
+import io
 import openai
 import streamlit.components.v1 as components 
 import hashlib
@@ -2766,26 +2767,30 @@ if mode == "기본 분석":
                             theme_df = extract_theme_table_long(clean_answers)
                             st.success("주제 추출 완료")
                             st.dataframe(theme_df, use_container_width=True)
+                            buf = io.BytesIO()
+                            theme_df.to_excel(buf, index=False)
+                            buf.seek(0)
                             st.download_button(
                                 "표1_주제_키워드_요약.xlsx 다운로드",
-                                theme_df.to_excel(index=False),
+                                data=buf.getvalue(),
                                 file_name="표1_주제_키워드_요약.xlsx",
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                             )
-                    else:
-                        theme_df = None
 
-            if theme_df is not None and st.button("2. 주제별 감성 분석"):
-                with st.spinner("감성 분석 중..."):
-                    sentiment_df = extract_sentiment_table_long(clean_answers, theme_df)
-                    st.success("감성 분석 완료")
-                    st.dataframe(sentiment_df, use_container_width=True)
-                    st.download_button(
-                        "표2_주제별_감성_요약.xlsx 다운로드",
-                        sentiment_df.to_excel(index=False),
-                        file_name="표2_주제별_감성_요약.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+                        # 감성 테이블 다운로드 버튼 (수정된 부분)
+                        with st.spinner("감성 분석 중..."):
+                            sentiment_df = extract_sentiment_table_long(clean_answers, theme_df)
+                            st.success("감성 분석 완료")
+                            st.dataframe(sentiment_df, use_container_width=True)
+                            buf2 = io.BytesIO()
+                            sentiment_df.to_excel(buf2, index=False)
+                            buf2.seek(0)
+                            st.download_button(
+                                "표2_주제별_감성_요약.xlsx 다운로드",
+                                data=buf2.getvalue(),
+                                file_name="표2_주제별_감성_요약.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
 
 
     with tabs[3]:
