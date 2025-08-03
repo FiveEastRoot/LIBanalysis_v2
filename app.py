@@ -1048,7 +1048,7 @@ def extract_sentiment_table_long(responses: list[str], theme_df: pd.DataFrame, b
             continue
         messages = make_sentiment_messages(batch, theme_df)
         try:
-            resp = safe_chat_completion(model="gpt-4.1", messages=messages, temperature=0.1, max_tokens=900)
+            resp = safe_chat_completion(model="gpt-4.1-mini", messages=messages, temperature=0.1, max_tokens=900)
             content = resp.choices[0].message.content.strip()
         except Exception as e:
             st.error(f"감성 분석 실패: {e}")
