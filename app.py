@@ -227,6 +227,76 @@ def safe_markdown(text, **kwargs):
     safe = escape_tildes(text, mode="markdown")
     st.markdown(safe, **kwargs)
 
+def build_common_overall_insight_prompt(midcat_scores: dict, within_deviations: dict, abc_df: pd.DataFrame) -> str:
+    midcat_str = ", ".join(f"{k} {v:.1f}" for k, v in midcat_scores.items())
+    strengths = []
+    weaknesses = []
+    for mid, series in within_deviations.items():
+        if series is None or series.empty:
+            continue
+        dev = series.dropna()
+        if dev.empty:
+            continue
+        sorted_series = dev.sort_values(ascending=False)
+        top_pos = sorted_series.head(1)
+        top_neg = sorted_series.tail(1)
+        strengths.append(f"{mid}의 '{top_pos.index[0]}' +{top_pos.iloc[0]:.1f}")
+        weaknesses.append(f"{mid}의 '{top_neg.index[0]}' {top_neg.iloc[0]:.1f}")
+    abc_pivot = abc_df.pivot(index="중분류", columns="문항유형", values="평균값")
+    abc_lines = []
+    for mid in abc_pivot.index:
+        vals = abc_pivot.loc[mid].to_dict()
+        # 존재하지 않을 수 있으니 안전하게
+        eval_val = vals.get("서비스 평가", None)
+        effect_val = vals.get("서비스 효과", None)
+        sat_val = vals.get("전반적 만족도", None)
+        abc_lines.append(
+            f"{mid}: 평가 {eval_val:.1f if eval_val is not None else 'N/A'}, 효과 {effect_val:.1f if effect_val is not None else 'N/A'}, 만족도 {sat_val:.1f if sat_val is not None else 'N/A'}"
+        )
+    abc_str = "\n".join(abc_lines)
+
+    prompt = f"""
+설문 데이터 공통 심화 분석 요약을 만들어줘.
+
+입력 요약:
+- 전체 중분류 평균 만족도: {midcat_str}
+- 중분류별 강점 예시: {', '.join(strengths[:3])}
+- 중분류별 약점 예시: {', '.join(weaknesses[:3])}
+- 서비스 평가/효과/만족도 (A/B/C) 비교:
+{abc_str}
+
+요청:
+1. 주요 관찰 패턴 2~3개를 간결하게 기술해줘.
+2. 어떤 중분류가 상대적 강점/약점인지 숫자와 함께 설명해줘.
+3. A/B/C 비교에서 드러나는 특징을 짚어줘.
+4. 전략적 제안 3개: (1) 우선 개입할 대상, (2) 확장할 강점, (3) 보완할 약점 각각 구체적으로 써줘.
+
+제한: 숫자는 한 자리 소수, 비즈니스 톤, 소제목 포함, 전체 700~1100자. 출력은 텍스트만.
+"""
+    return prompt.strip()
+
+def build_area_insight_prompt(midcat_scores: dict, abc_df: pd.DataFrame) -> str:
+    midcat_str = ", ".join(f"{k} {v:.1f}" for k, v in midcat_scores.items())
+    abc_markdown = abc_df.to_markdown(index=False)
+    prompt = f"""
+설문 데이터 영역별 A/B/C 비교 요약을 만들어줘.
+
+입력:
+- 전체 중분류 평균: {midcat_str}
+- A/B/C 유형별 중분류별 평균값 (서비스 평가/효과/만족도):
+{abc_markdown}
+
+요청:
+1. A/B/C 흐름에서 눈에 띄는 차이 2개(예: 평가 대비 만족도가 낮은 중분류 등).
+2. 각 유형별 상대적 강점/약점 한두 문장씩 정리.
+3. 우선순위 제안: 유지·확장할 것 1개, 보완할 것 1개씩.
+
+숫자는 한 자리 소수, 소제목 포함, 비즈니스 톤, 600~1000자 분량, 출력은 텍스트만.
+"""
+    return prompt.strip()
+
+
+
 # ------------------ 장문 응답용 정제 ------------------
 def is_meaningful_long(text: str) -> bool:
     exclude = ['없음', '모름', '없어요', 'x', '해당없음', '없다', '없습니다', '없습니다.']
@@ -3030,6 +3100,20 @@ elif mode == "심화 분석":
                         f"{mid} 항목별 편차"
                     )
                     st.markdown("---")
+        # --- GPT 요약 (전체) 추가 ---
+        overall_mid_scores = compute_midcategory_scores(df)
+        within_item_scores = compute_within_category_item_scores(df)  # midcategory -> Series
+        abc_df = get_abc_category_means(df)
+
+        prompt_overall = build_common_overall_insight_prompt(
+            {k: float(v) for k, v in overall_mid_scores.items()},
+            within_item_scores,
+            abc_df
+        )
+        insight_overall = call_gpt_for_insight(prompt_overall)
+        insight_overall = insight_overall.replace("~", "-")
+        render_insight_card("GPT 공통 심화 분석 요약 (전체)", insight_overall, key="common-overall-insight")
+
     with tabs[1]:
         st.header("🔍 공통 심화 분석(영역별 A/B/C 비교)")
         df_mean = get_abc_category_means(df)
@@ -3044,6 +3128,18 @@ elif mode == "심화 분석":
 
         st.markdown("#### 상세 데이터")
         st.dataframe(df_mean)
+        df_mean = get_abc_category_means(df)
+        # --- GPT 요약 (영역) 추가 ---
+        midcat_scores = compute_midcategory_scores(df)
+        prompt_area = build_area_insight_prompt(
+            {k: float(v) for k, v in midcat_scores.items()},
+            df_mean
+        )
+        area_insight = call_gpt_for_insight(prompt_area)
+        area_insight = area_insight.replace("~", "-")
+        render_insight_card("GPT 공통 심화 분석 요약 (영역)", area_insight, key="common-area-insight")
+
+
     with tabs[2]:
         page_segment_analysis(df)
         
