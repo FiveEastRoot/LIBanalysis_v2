@@ -2586,7 +2586,7 @@ st.markdown(
         top: 0;
         background-color: white;
         z-index: 1000;
-        padding: 16px 0;
+        padding: 8px 0;
         text-align: center;
         border-bottom: 2px solid #eee;
     ">
