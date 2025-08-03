@@ -2893,7 +2893,7 @@ def show_basic_strategy_insights(df):
 # 실행 엔트리
 # ─────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="LIB SCOPE 공공도서관 설문 시각화 대시보드",
+    page_title="LIBanalysis 공공도서관 설문 시각화 대시보드",
     layout="wide"
 )
 
