@@ -2573,11 +2573,37 @@ def show_basic_strategy_insights(df):
 # 실행 엔트리
 # ─────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="공공도서관 설문 시각화 대시보드",
+    page_title="LIB SCOPE 공공도서관 설문 시각화 대시보드",
     layout="wide"
 )
 
-mode = st.sidebar.radio("분석 모드", ["기본 분석", "심화 분석", "전략 인사이트(기본)"])
+# 여기부터 추가 ----------------------
+# 페이지 최상단에 고정 헤더 삽입
+st.markdown(
+    """
+    <div style="
+        position: sticky;
+        top: 0;
+        background-color: white;
+        z-index: 1000;
+        padding: 16px 0;
+        text-align: center;
+        border-bottom: 2px solid #eee;
+    ">
+        <h1 style="margin: 0; font-size: 2.5rem; font-weight: bold;">LIBSCOPE</h1>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+# 페이지 내용이 헤더에 가려지지 않도록 약간의 여백 삽입
+st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
+# 여기까지 추가 ----------------------
+
+mode = st.sidebar.radio("LIBSCOPE", ["기본 분석", "심화 분석", "전략 인사이트(기본)"])
+...
+
+
+mode = st.sidebar.radio("LIBSCOPE", ["기본 분석", "심화 분석", "전략 인사이트(기본)"])
 
 uploaded = st.file_uploader("📂 엑셀(.xlsx) 파일 업로드", type=["xlsx"])
 if not uploaded:
