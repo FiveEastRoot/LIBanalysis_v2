@@ -1005,7 +1005,7 @@ def extract_sentiment_table(responses, theme_df, batch_size=50):
         messages = make_sentiment_messages(batch, theme_df)
         try:
             resp = openai.ChatCompletion.create(
-                model="gpt-4o-mini",
+                model="gpt-4.1-mini",
                 messages=messages,
                 temperature=0.1,
                 max_tokens=900
