@@ -948,22 +948,11 @@ def parse_nl_query_to_spec_v2(question: str) -> dict:
 너는 설문 데이터 자연어 질의를 구조화된 JSON 스펙으로 변환하는 파서야.
 반환은 오직 JSON 하나. 가능한 경우 아래 필드를 채워라.
 필드 설명:
-- chart: "bar"/"line"/"heatmap"/"radar"/"delta_bar"/"grouped_bar" 또는 null
 - x: 주 축 (컬럼명 또는 중분류)
 - y: (가능하면) 비교 축
 - groupby: 비교 기준 (단일 또는 리스트)
-- filters: [{"col":..., "op": "contains"|"=="|"in", "value": ...}, ...]
 - focus: 사용자의 의도 요약
 
-예시:
-"혼자 이용하는 사람들의 연령대 분포 보여주고 주로 가는 도서관별 중분류 만족도 강점/약점 비교" ->
-{
-  "chart": null,
-  "x": "SQ2_GROUP",
-  "groupby": "SQ4",
-  "filters": [{"col": "이용형태", "op": "contains", "value": "혼자"}],
-  "focus": "혼자 이용자 연령대 분포 및 주 이용 도서관 중분류 강약점 비교"
-}
 불확실한 부분이면 null을 넣고, focus는 항상 질문을 압축해서 짧게 작성해.
 출력은 코드블럭 없이 순수 JSON만.
 """
@@ -981,18 +970,18 @@ def parse_nl_query_to_spec_v2(question: str) -> dict:
         content = re.sub(r"^```json\s*|\s*```$", "", content, flags=re.IGNORECASE).strip()
         raw = json.loads(content)
     except Exception:
-        # fallback rule-based quick parser (very simple heuristics)
-        raw = {"chart": None, "x": None, "y": None, "groupby": None, "filters": [], "focus": question}
+        # fallback rule-based quick parser
+        raw = {"x": None, "y": None, "groupby": None, "focus": question}
         lower = question.lower()
-        if "레이더" in question or "radar" in lower:
-            raw["chart"] = "radar"
         if "비교" in lower and "도서관" in lower:
             raw["groupby"] = "SQ4"
-        if "혼자" in lower:
-            raw["filters"].append({"col": "이용형태", "op": "contains", "value": "혼자"})
         if "연령" in lower or "나이" in lower:
             raw["x"] = "SQ2_GROUP"
+    # enforce no chart/filters regardless of LLM output
+    raw["chart"] = None
+    raw["filters"] = []
     final_spec = normalize_and_validate_spec(raw, question)
+    final_spec["filters"] = []  # double ensure
     return final_spec
 
 # 3. 통합된 문항 추출 (기존 두 버전 합쳐서 하나로)
@@ -1197,90 +1186,6 @@ def normalize_chart_choice(raw_chart):
         return raw_chart
     return None
 
-def render_spec_chart(df_filtered: pd.DataFrame, spec: dict, q_hash: str):
-    chart = normalize_chart_choice(spec.get("chart"))
-    gb = spec.get("groupby")
-    x = spec.get("x")
-
-    st.markdown("### 자동 생성된 시각화")
-
-    if chart == "radar":
-        fig = plot_midcategory_radar(df_filtered)
-        if fig is not None:
-            st.plotly_chart(fig, use_container_width=True, key=f"nlq-radar-{q_hash}")
-        else:
-            st.warning("레이더 차트를 그릴 충분한 중분류 문항이 없습니다.")
-    elif chart == "heatmap":
-        if not gb or gb not in df_filtered.columns:
-            st.warning("히트맵은 비교 기준(groupby)이 필요합니다. groupby가 유효한지 확인하세요.")
-            return
-        midcats = list(MIDDLE_CATEGORY_MAPPING.keys())
-        group = df_filtered.groupby(df_filtered[gb].astype(str))
-        rows = []
-        for label, g in group:
-            scores = compute_midcategory_scores(g)
-            row = {mc: scores.get(mc, np.nan) for mc in midcats}
-            row[gb] = label
-            rows.append(row)
-        if not rows:
-            st.warning("groupby 기준으로 나눌 수 있는 충분한 데이터가 없습니다.")
-            return
-        heat_df = pd.DataFrame(rows).set_index(gb)[midcats]
-        fig = px.imshow(
-            heat_df,
-            text_auto=True,
-            aspect="auto",
-            color_continuous_scale="Blues",
-            title=f"{gb}별 중분류 만족도 히트맵",
-            labels=dict(x="중분류", y=gb, color="평균점수")
-        )
-        st.plotly_chart(fig, use_container_width=True, key=f"nlq-heatmap-{q_hash}")
-    elif chart in {"bar", "grouped_bar"}:
-        if x and any(x.strip().lower() == mc.strip().lower() for mc in MIDDLE_CATEGORY_MAPPING.keys()):
-            fig, tbl = plot_within_category_bar(df_filtered, x)
-            if fig is not None:
-                render_chart_and_table(fig, tbl, x, key_prefix=f"nlq-bar-{q_hash}")
-            else:
-                st.warning(f"'{x}'에 해당하는 문항이 없어 바를 그릴 수 없습니다.")
-        elif gb and gb in df_filtered.columns:
-            counts = df_filtered[gb].astype(str).value_counts().nlargest(3)
-            for label in counts.index:
-                subset = df_filtered[df_filtered[gb].astype(str) == label]
-                sub_scores = compute_midcategory_scores(subset)
-                if sub_scores.empty:
-                    continue
-                fig = go.Figure()
-                midcats = list(sub_scores.index)
-                vals = [sub_scores.get(m, 0) for m in midcats]
-                fig.add_trace(go.Scatterpolar(
-                    r=vals + [vals[0]],
-                    theta=midcats + [midcats[0]],
-                    fill=None,
-                    name=f"{gb}={label}"
-                ))
-                overall = compute_midcategory_scores(df_filtered)
-                if not overall.empty:
-                    overall_vals = [overall.get(m, 0) for m in midcats]
-                    fig.add_trace(go.Scatterpolar(
-                        r=overall_vals + [overall_vals[0]],
-                        theta=midcats + [midcats[0]],
-                        fill=None,
-                        name="전체 평균",
-                        line=dict(dash="dash")
-                    ))
-                fig.update_layout(
-                    polar=dict(radialaxis=dict(range=[0, 100])),
-                    title=f"{gb}={label} vs 전체 평균",
-                    height=400,
-                )
-                st.plotly_chart(fig, use_container_width=True, key=f"nlq-grouped-bar-{q_hash}-{label}")
-        else:
-            st.info("bar/grouped_bar 시각화를 만들려면 x 또는 groupby가 필요합니다.")
-    else:
-        st.info("차트 유형이 없거나 인식되지 않았습니다. 기본 요약 차트(레이더)를 보여줍니다.")
-        fig = plot_midcategory_radar(df_filtered)
-        if fig is not None:
-            st.plotly_chart(fig, use_container_width=True, key=f"nlq-default-radar-{q_hash}")
 
 def handle_nl_question_v2(df: pd.DataFrame, question: str):
     st.markdown("## 자연어 질의 결과")
@@ -1290,69 +1195,36 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
     cache_key = f"nlq_cache_{q_hash}"
     cached = st.session_state.get(cache_key)
 
-    # 파싱 및 정규화
+    # 파싱 및 정규화 (차트/필터 UI 제거)
     try:
         spec = parse_nl_query_to_spec_v2(question)
     except Exception as e:
         logging.error(f"자연어 질의 파싱 실패: {e}", exc_info=True)
         spec = {"chart": None, "x": None, "y": None, "groupby": None, "filters": [], "focus": question}
         spec = normalize_and_validate_spec(spec, question)
+        spec["filters"] = []
 
-    st.markdown("### 파싱된 스펙 (수정 가능)")
-
-
-
-        # filters: editable list with persistent state across reruns
-        filter_state_key = f"nlq_filters_{q_hash}"
-        if filter_state_key not in st.session_state:
-            # deep copy to avoid mutating original
-            st.session_state[filter_state_key] = [dict(f) for f in spec.get("filters", [])]
-
-        st.markdown("필터 조건 (여러 개 허용)")
-        filters = st.session_state[filter_state_key]
-
-        # 편집 UI
-        for i, f in enumerate(filters):
-            cols = st.columns([3, 2, 3, 1])
-            with cols[0]:
-                col_name = st.text_input(f"필터 {i+1} 컬럼(col)", value=f.get("col", ""), key=f"nlq_filter_col_{q_hash}_{i}")
-            with cols[1]:
-                op = st.selectbox(
-                    f"연산자(op) {i+1}",
-                    options=["contains", "==", "in"],
-                    index=["contains", "==", "in"].index(f.get("op", "contains")) if f.get("op") in ["contains", "==", "in"] else 0,
-                    key=f"nlq_filter_op_{q_hash}_{i}"
-                )
-            with cols[2]:
-                val = st.text_input(f"값(value) {i+1}", value=str(f.get("value", "")), key=f"nlq_filter_value_{q_hash}_{i}")
-            with cols[3]:
-                remove = st.checkbox("삭제", key=f"nlq_filter_rm_{q_hash}_{i}")
-
-            if remove:
-                filters[i]["_remove"] = True
-            else:
-                parsed_val = [v.strip() for v in val.split(",")] if op == "in" and "," in val else val
-                filters[i].update({"col": col_name, "op": op, "value": parsed_val})
-                filters[i].pop("_remove", None)
-
-        # 실제 삭제 처리
-        st.session_state[filter_state_key] = [f for f in filters if not f.get("_remove")]
-
-        # 새 필터 추가
-        if st.button("필터 추가", key=f"nlq_filter_add_{q_hash}"):
-            st.session_state[filter_state_key].append({"col": "", "op": "contains", "value": ""})
-
-        # spec에 반영
-        spec["filters"] = st.session_state[filter_state_key]
-
-
-        # focus
+    st.markdown("### 파싱된 스펙 (수동 수정 가능)")
+    with st.expander("스펙 상세 및 수동 수정", expanded=True):
+        # focus만 노출
         spec["focus"] = st.text_input("질의 요약 (focus)", value=spec.get("focus") or question, key=f"nlq_focus_{q_hash}")
+
+        # groupby / x / y는 필요하다면 보여줄 수 있지만 차트/필터 관련은 뺌
+        if spec.get("groupby"):
+            st.markdown(f"- 비교 기준 (groupby): {spec['groupby']}")
+        if spec.get("x"):
+            st.markdown(f"- x 축: {spec['x']}")
+        if spec.get("y"):
+            st.markdown(f"- y 축: {spec['y']}")
+
+        # 강제: 필터는 항상 없음
+        spec["filters"] = []
 
         # 재검증
         spec = normalize_and_validate_spec(spec, question)
+        spec["filters"] = []  # 다시 보장
 
-        # 요약 표시
+        # 요약 표시 (chart / filters 생략)
         readable = []
         if spec.get("x"):
             readable.append(f"x: {spec['x']}")
@@ -1360,9 +1232,6 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
             readable.append(f"y: {spec['y']}")
         if spec.get("groupby"):
             readable.append(f"groupby: {spec['groupby']}")
-        if spec.get("filters"):
-            filt_strs = [f"{f['col']} {f['op']} {f['value']}" for f in spec["filters"]]
-            readable.append(f"필터: {'; '.join(filt_strs)}")
         readable.append(f"focus: {spec.get('focus')}")
         st.markdown("**요약된 스펙 해석:** " + " | ".join(readable))
 
@@ -1374,12 +1243,12 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
         explanation_text = cached["explanation_text"]
         used_model = cached.get("used_model", "unknown")
         render_explanation_from_spec(f"재사용된 GPT 생성형 해석 ({used_model})", explanation_text, model=used_model, key=f"nlq-insight-cached-{q_hash}")
-        # 필터는 그대로 쓰되 시각화는 항상 최신 spec/filtered로
-        df_filtered = apply_filters(df, spec.get("filters", []))
+        df_filtered = df  # 필터 없이 전체 사용
     else:
-        df_filtered = apply_filters(df, spec.get("filters", []))
+        df_filtered = df  # 필터 없이 전체 사용
+
         if df_filtered.empty:
-            st.warning("필터 적용 결과 데이터가 없습니다. 조건을 조정해보세요.")
+            st.warning("데이터가 없습니다.")
             return
 
         try:
@@ -1415,7 +1284,7 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
                 })
         else:
             top_segments.append({
-                "label": "필터된 전체",
+                "label": "전체",
                 "n": len(df_filtered),
                 "profile": overall_mid_dict
             })
@@ -1443,6 +1312,7 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
             "used_model": used_model
         }
 
+    # 차트 없음: render_spec_chart 호출 제거
 
 
 # ─────────────────────────────────────────────────────
