@@ -1037,7 +1037,34 @@ def extract_sentiment_table(responses, theme_df, batch_size=50):
         result_df = pd.DataFrame(columns=['주제명', '감성', '표현 양상 요약'])
     return result_df
 
+@st.cache_data(show_spinner=False)
+def extract_sentiment_table_long(responses: list[str], theme_df: pd.DataFrame, batch_size: int = 50) -> pd.DataFrame:
+    all_parts = []
+    if not responses:
+        return pd.DataFrame(columns=['주제명', '감성', '표현 양상 요약'])
+    for i in range(0, len(responses), batch_size):
+        batch = [r for r in responses[i:i+batch_size] if isinstance(r, str) and r.strip()]
+        if not batch:
+            continue
+        messages = make_sentiment_messages(batch, theme_df)
+        try:
+            resp = safe_chat_completion(model="gpt-4.1", messages=messages, temperature=0.1, max_tokens=900)
+            content = resp.choices[0].message.content.strip()
+        except Exception as e:
+            st.error(f"감성 분석 실패: {e}")
+            logging.exception("LLM 호출 오류")
+            continue
 
+        logging.info(f"[감성 LLM 응답]\n{content}")
+
+        df_part = parse_markdown_table(content, ['주제명', '감성', '표현 양상 요약'])
+        if not df_part.empty:
+            all_parts.append(df_part)
+    if all_parts:
+        result = pd.concat(all_parts, ignore_index=True).drop_duplicates(subset=['주제명','감성'])
+    else:
+        result = pd.DataFrame(columns=['주제명', '감성', '표현 양상 요약'])
+    return result.reset_index(drop=True)
 
 # ---------- 자연어 질의  인사이트 파이프라인 ----------
 
