@@ -1299,19 +1299,7 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
         spec = normalize_and_validate_spec(spec, question)
 
     st.markdown("### 파싱된 스펙 (수정 가능)")
-    with st.expander("스펙 상세 및 수동 수정", expanded=True):
-        # chart selectbox
-        current_chart = normalize_chart_choice(spec.get("chart"))
-        chart_options = [None, "bar", "line", "heatmap", "radar", "delta_bar", "grouped_bar"]
-        default_index = chart_options.index(current_chart) if current_chart in chart_options else 0
-        chosen = st.selectbox(
-            "차트 유형 (chart)",
-            chart_options,
-            index=default_index,
-            format_func=lambda x: x if x else "없음",
-            key=f"nlq_chart_{q_hash}"
-        )
-        spec["chart"] = normalize_chart_choice(chosen)
+
 
 
         # filters: editable list with persistent state across reruns
@@ -1366,8 +1354,6 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
 
         # 요약 표시
         readable = []
-        if spec.get("chart"):
-            readable.append(f"차트: {spec['chart']}")
         if spec.get("x"):
             readable.append(f"x: {spec['x']}")
         if spec.get("y"):
@@ -1457,9 +1443,6 @@ def handle_nl_question_v2(df: pd.DataFrame, question: str):
             "used_model": used_model
         }
 
-    # 차트는 캐시 여부와 관계없이 항상 최신 spec/filtered로 그림
-    if 'df_filtered' in locals():
-        render_spec_chart(df_filtered, spec, q_hash)
 
 
 # ─────────────────────────────────────────────────────
