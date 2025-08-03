@@ -258,55 +258,67 @@ def make_theme_messages(batch: list[str]) -> list[dict]:
     ]
 
 def make_sentiment_messages(batch: list[str], theme_df: pd.DataFrame) -> list[dict]:
-    example_table = """
-[예시 표]
-| 주제명 | 감성 | 표현 양상 요약 |
-| --- | --- | --- |
+    example_rows = """
 | 공간 및 시설 | 부정 | 좌석 부족과 소음으로 이용 만족도가 낮다. |
 | 공간 및 시설 | 긍정 | 조명과 청결에 대해 긍정적 평가가 있다. |
 | 자료 확충 | 부정 | 최신 자료가 부족하여 이용에 제약이 있다. |
 | 자료 확충 | 긍정 | 희망도서 반영이 잘 되어 만족한다. |
-| 프로그램 다양화 | 부정 | 대상별 프로그램이 부족하다. |
-| 프로그램 다양화 | 긍정 | 유아 대상 체험이 호응이 좋다. |
-| 운영 및 시스템 | 부정 | 공지 전달이 안 되어 혼란이 생긴다. |
-| 운영 및 시스템 | 긍정 | 반납 시스템이 편리하다. |
-| 직원 및 응대 | 부정 | 안내가 불친절하게 느껴졌다. |
-| 직원 및 응대 | 긍정 | 친절한 응대에 만족한다. |
-| 기타 | 긍정 | 전반적으로 만족한다. |
 | 기타 | 중립 | 특별히 언급할 사항은 없다. |
 """
-    system_content = f"""
-당신은 도서관 자유서술 응답을 주제별로 감성(긍정/부정/중립) 기준으로 분류하고,
-각 주제+감성 조합에 대해 표현 양상을 200자 내외로 요약하는 데이터 분석가입니다.
-아래 예시를 참고해서 동일한 형식의 마크다운 표로만 답변하세요.
-{example_table}
-반드시 주제명은 다음 중 하나만 사용하세요: 공간 및 시설, 자료 확충, 프로그램 다양화, 운영 및 시스템, 직원 및 응대, 기타.
-감성은 '긍정', '부정', '중립'만 사용해야 합니다.
-출력은 아래 헤더를 포함한 표로만 해주세요:
-| 주제명 | 감성 | 표현 양상 요약 |
-"""
-    user_block = "[실제 입력 응답]\n" + "\n".join(batch)
 
-    # 명시적으로 실패하면 사용자에게 알려주기 (예: tabulate 설치 안 됐을 때)
+    system_content = (
+        "당신은 도서관 자유서술 응답을 주제별로 감성(긍정/부정/중립) 분류하고, "
+        "각 주제+감성 조합에 대해 특징적인 표현 양상을 200자 내외로 요약하는 분석가입니다. "
+        "감성은 '긍정', '부정', '중립'만 사용합니다. 주제명은 다음 중 하나만 쓰세요: "
+        "공간 및 시설, 자료 확충, 프로그램 다양화, 운영 및 시스템, 직원 및 응대, 기타. "
+        "출력은 마크다운 표로만, 아래 예시 형식과 동일하게만 답변하세요:\n"
+        "| 주제명 | 감성 | 표현 양상 요약 |\n"
+        "| --- | --- | --- |\n" + example_rows.strip() + "\n"
+    )
+
+    user_block = "[실제 입력 응답]\n" + "\n".join(batch)
     try:
         theme_table_md = theme_df.to_markdown(index=False)
     except ImportError as e:
         raise ImportError(
             "theme_df.to_markdown() 호출 중 ImportError 발생했습니다. "
             "이 함수는 내부적으로 'tabulate' 패키지를 필요로 합니다. "
-            "requirements.txt에 'tabulate>=0.9.0'을 추가하고 환경에 설치해 주세요. "
+            "requirements.txt에 'tabulate>=0.9.0'을 추가하고 설치해 주세요. "
             f"원래 에러: {e}"
         )
 
-    combined = user_block + "\n\n[주제 테이블]\n" + theme_table_md + "\n\n[결과 표]\n| 주제명 | 감성 | 표현 양상 요약 |"
+    user_content = (
+        user_block +
+        "\n\n[주제 테이블]\n" + theme_table_md +
+        "\n\n[결과 표]\n| 주제명 | 감성 | 표현 양상 요약 |"
+    )
 
     return [
         {"role": "system", "content": system_content},
-        {"role": "user", "content": combined}
+        {"role": "user", "content": user_content}
     ]
 
+
 def parse_markdown_table(table_text: str, cols: list[str]) -> pd.DataFrame:
-    lines = [l for l in table_text.splitlines() if "|" in l and "---" not in l]
+    # 전체 텍스트에서 가장 처음 나오는 마크다운 표 블록(헤더 + 구분선 + 행들) 추출
+    table_match = re.search(
+        r"(\|[^\n]*\|\s*\n\|\s*[-:]+\s*\|\s*[-:]+\s*\|\s*[-:]+\s*\n(?:\|[^\n]*\|\s*\n?)*)",
+        table_text
+    )
+    if table_match:
+        table_block = table_match.group(1)
+    else:
+        # fallback: 전체에서 파이프 포함 라인만
+        table_block = "\n".join([l for l in table_text.splitlines() if "|" in l])
+
+    lines = []
+    for line in table_block.splitlines():
+        # separator 라인은 제외
+        if re.match(r'^\|\s*[-:]+\s*\|\s*[-:]+\s*\|\s*[-:]+\s*\|', line):
+            continue
+        if "|" in line:
+            lines.append(line)
+
     records = []
     for line in lines:
         parts = [p.strip() for p in line.strip().split("|")[1:-1]]
@@ -314,7 +326,6 @@ def parse_markdown_table(table_text: str, cols: list[str]) -> pd.DataFrame:
             records.append(parts)
     df = pd.DataFrame(records, columns=cols)
     return df
-
 
 # ─────────────────────────────────────────────────────
 # DataFrame & visualization helpers
