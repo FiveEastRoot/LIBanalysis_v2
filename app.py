@@ -2385,7 +2385,30 @@ def page_segment_analysis(df):
         showlegend=True,
         legend=dict(orientation="v", y=0.85, x=1.02)
     )
+
     st.plotly_chart(fig_radar, use_container_width=True)
+
+    # 추가: 레이더에 들어간 전체 평균 + 상위 조합 프로파일 테이블
+    radar_table_rows = []
+
+    # 전체 평균 행
+    overall_row = {"조합": "전체 평균"}
+    overall_row.update({mc: round(overall_profile.get(mc, 0), 1) for mc in midcats})
+    radar_table_rows.append(overall_row)
+
+    # 상위 N개 조합 행
+    for _, row in top_df.iterrows():
+        combo_label = " | ".join([str(row[c]) for c in segment_cols_filtered])
+        entry = {"조합": combo_label}
+        for mc in midcats:
+            val = row.get(mc)
+            entry[mc] = round(val, 1) if not pd.isna(val) else None
+        radar_table_rows.append(entry)
+
+    radar_table_df = pd.DataFrame(radar_table_rows)
+    st.markdown("#### 레이더 차트에 사용된 프로파일 데이터") 
+    st.dataframe(_sanitize_dataframe_for_streamlit(radar_table_df))
+
 
     # 룰 기반 요약
     overall_profile_dict = {mc: overall_profile.get(mc, 0) for mc in midcats}
@@ -2420,6 +2443,11 @@ def page_segment_analysis(df):
     )
     st.plotly_chart(fig_abs, use_container_width=True)
 
+    st.markdown("#### 세그먼트 조합별 중분류 평균 (히트맵 기반 데이터)")
+    heatmap_table_display = heatmap_plot.reset_index().rename(columns={"index": "조합"})
+    st.dataframe(_sanitize_dataframe_for_streamlit(heatmap_table_display))
+
+
     # 프롬프트용 테이블: 조합명과 중분류 점수만 전달
     heatmap_table = group_means[["조합", *midcats]]
     prompt_heat = build_heatmap_prompt(heatmap_table, midcats, label_col="조합")
@@ -2439,6 +2467,11 @@ def page_segment_analysis(df):
         labels=dict(x="중분류", y="세그먼트 조합", color="편차")
     )
     st.plotly_chart(fig_delta, use_container_width=True)
+
+    st.markdown("#### 전체 평균 대비 편차 (Delta) 데이터")
+    delta_table_display = delta_plot.reset_index().rename(columns={"index": "조합"})
+    st.dataframe(_sanitize_dataframe_for_streamlit(delta_table_display))
+
 
     delta_summary_parts = []
     for mc in midcats:
@@ -2493,6 +2526,18 @@ def page_segment_analysis(df):
         prompt_ci = build_ci_prompt(subset_local, mc)
         ci_insight = call_gpt_for_insight(prompt_ci)
         render_insight_card("GPT 생성형 해석 (신뢰구간)", ci_insight, key="ci-insight")
+
+# --- 추가: 편차 + 신뢰구간 상세 테이블 ---
+        ci_display = subset_local[["조합", mc, "delta", "se"]].copy()
+        ci_display["신뢰구간 하한"] = (ci_display["delta"] - ci_display["se"]).round(2)
+        ci_display["신뢰구간 상한"] = (ci_display["delta"] + ci_display["se"]).round(2)
+        ci_display["유의미 여부"] = ci_display.apply(
+            lambda r: "유의미" if not (r["신뢰구간 하한"] <= 0 <= r["신뢰구간 상한"]) else "불확실", axis=1
+        )
+        st.markdown(f"#### '{mc}' 편차 + 신뢰구간 상세")
+        st.dataframe(_sanitize_dataframe_for_streamlit(ci_display))
+
+
 
 def show_basic_strategy_insights(df):
     st.subheader("1. 이용 목적 (DQ4 계열) × 전반 만족도 (중분류 기준 레이더)")
