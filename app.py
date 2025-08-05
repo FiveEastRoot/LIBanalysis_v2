@@ -2964,7 +2964,7 @@ if mode == "기본 분석":
             else:
                 for idx, col in enumerate(subregion_cols):
                     bar, tbl = plot_stacked_bar_with_table(df, col)
-                    st.markdown(f"##### {col}")
+                    #st.markdown(f"##### {col}")
                     render_chart_and_table(bar, tbl, col, key_prefix=f"subregion-{idx}")
         with sub_tabs[1]:
             page_short_keyword(df)
