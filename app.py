@@ -2248,7 +2248,7 @@ def page_basic_vis(df):
     tabs2 = st.tabs(list(section_mapping.keys()))
     for tab, section_name in zip(tabs2, section_mapping.keys()):
         with tab:
-            st.markdown(f"### {section_name}")
+           # st.markdown(f"### {section_name}")
             for q in section_mapping[section_name]:
                 try:
                     bar, table_df = plot_stacked_bar_with_table(df, q)
