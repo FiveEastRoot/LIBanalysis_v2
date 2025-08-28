@@ -827,7 +827,7 @@ def extract_keyword_and_audience(responses, batch_size=20):
             results.append((row['response'], row['keywords'], row['audience']))
     return results
 
-def call_gpt_for_insight(prompt, model="gpt-4.1-mini", temperature=0.2, max_tokens=1500):
+def call_gpt_for_insight(prompt, model="gpt-4.1", temperature=0.2, max_tokens=1500):
     try:
         resp = client.chat.completions.create(
             model=model,
@@ -1094,7 +1094,7 @@ def extract_sentiment_table(responses, theme_df, batch_size=50):
         messages = make_sentiment_messages(batch, theme_df)
         try:
             resp = openai.ChatCompletion.create(
-                model="gpt-4.1-mini",
+                model="gpt-4.1",
                 messages=messages,
                 temperature=0.1,
                 max_tokens=900
@@ -1137,7 +1137,7 @@ def extract_sentiment_table_long(responses: list[str], theme_df: pd.DataFrame, b
             continue
         messages = make_sentiment_messages(batch, theme_df)
         try:
-            resp = safe_chat_completion(model="gpt-4.1-mini", messages=messages, temperature=0.1, max_tokens=900)
+            resp = safe_chat_completion(model="gpt-4.1", messages=messages, temperature=0.1, max_tokens=900)
             content = resp.choices[0].message.content.strip()
         except Exception as e:
             st.error(f"감성 분석 실패: {e}")
