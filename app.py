@@ -2168,7 +2168,6 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
         margin=dict(t=30, b=5),
     )
 
-    table_df = likert_df.copy()
     return fig, table_df
 
 def plot_pair_bar(df, prefix):
