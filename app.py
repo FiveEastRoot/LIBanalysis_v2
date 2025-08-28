@@ -1099,7 +1099,7 @@ def extract_sentiment_table(responses, theme_df, batch_size=50):
                 temperature=0.1,
                 max_tokens=900
             )
-            content = resp['choices'][0]['message']['content'].strip()
+            content = resp.choices[0].message.content.strip()
         except Exception as e:
             logging.warning(f"LLM 호출 실패: {e}")
             continue
@@ -2595,7 +2595,7 @@ def page_segment_analysis(df):
         ))
         fig_ci.add_hline(y=0, line_dash="dash", line_color="black")
         fig_ci.update_layout(
-            title=f"{mc} 전체 평균 대비 편차 (신뢰구간, 상위 5개 조합)",
+            title=f"{mc} 전체 평균 대비 편차 (신뢰구간, 상위 10개 조합)",
             yaxis_title="편차",
             height=350,
             margin=dict(t=40, b=60)
@@ -2626,7 +2626,7 @@ def page_segment_analysis(df):
 
         prompt_ci = build_ci_prompt(subset_local, mc)
         ci_insight = call_gpt_for_insight(prompt_ci)
-        render_insight_card("GPT 생성형 해석 (신뢰구간)", ci_insight, key="ci-insight")
+        render_insight_card("GPT 생성형 해석 (신뢰구간)", ci_insight, key=f"ci-insight-{mc}")
 
 
 
