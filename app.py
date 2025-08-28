@@ -2122,6 +2122,7 @@ def plot_likert_diverging(df, prefix="DQ7-E"):
         dist[col] = pct
     likert_df = pd.DataFrame(dist).T
     likert_df = likert_df.reindex(columns=range(1,8))
+    likert_df = likert_df.reindex(index=likert_df.index[::-1])
 
     fig = go.Figure()
     neg_scores = [4,3,2,1]
